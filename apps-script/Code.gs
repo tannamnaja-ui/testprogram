@@ -21,11 +21,20 @@ const FOLDER_ID = '1fwD2jPox8GojPEENajr2jLTt_9NUfZTH';
 const MAX_BYTES = 15 * 1024 * 1024;
 const KEY_PREFIX = 'row:';
 
-// GET ?action=list → รายการรูปทั้งหมดพร้อมข้อที่อัปโหลด (รองรับ ?callback= แบบ JSONP)
+// OAuth Client ID ของปุ่ม "เข้าสู่ระบบด้วย Google" (ต้องตรงกับค่า GOOGLE_CLIENT_ID ใน index.html)
+const GOOGLE_CLIENT_ID = '';
+const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเกินเวลานี้ = ออกไปแล้ว
+
+// GET ?action=list → รายการรูปทั้งหมดพร้อมข้อที่อัปโหลด
+// GET ?action=ping&sid=... → แจ้งว่ายังเปิดดูอยู่ และรับรายชื่อผู้ที่กำลังดู
+// (ทุก action รองรับ ?callback= แบบ JSONP)
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'list') {
+  if (prm.action === 'ping' || prm.action === 'leave') {
+    try { out = presence(prm); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'list') {
     try {
       const files = [];
       const it = getFolder().getFiles();
@@ -46,7 +55,57 @@ function doGet(e) {
   return reply(out, prm.callback);
 }
 
+// ---------- ผู้ที่กำลังดู ----------
+function presence(prm) {
+  const sid = String(prm.sid || '');
+  if (!/^[\w-]{8,64}$/.test(sid)) throw new Error('sid ไม่ถูกต้อง');
+  // ตรวจ token นอก lock เพราะต้องเรียกไปที่ Google
+  const profile = prm.token ? verifyIdToken(prm.token) : null;
+  const cache = CacheService.getScriptCache();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let map;
+  try {
+    map = JSON.parse(cache.get('presence') || '{}');
+    const now = Date.now();
+    for (const k in map) if (now - map[k].last > PRESENCE_TTL_MS) delete map[k];
+    if (prm.action === 'leave') {
+      delete map[sid];
+    } else {
+      const cur = map[sid] || {};
+      const user = prm.signout ? null : (profile || cur.user || null);
+      map[sid] = { last: now, user };
+    }
+    cache.put('presence', JSON.stringify(map), 21600);
+  } finally {
+    lock.releaseLock();
+  }
+  // รวมหลายแท็บของบัญชีเดียวกันเป็นคนเดียว
+  const people = {}, me = map[sid] && map[sid].user;
+  let guests = 0;
+  for (const k in map) {
+    const u = map[k].user;
+    if (u) people[u.email] = u; else guests++;
+  }
+  return { ok: true, you: me || null, viewers: Object.values(people), guests, loginEnabled: !!GOOGLE_CLIENT_ID };
+}
+
+// ยืนยัน ID token กับ Google (ปลอมชื่อไม่ได้)
+function verifyIdToken(token) {
+  if (!GOOGLE_CLIENT_ID) return null;
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return null;
+  const t = JSON.parse(res.getContentText());
+  if (t.aud !== GOOGLE_CLIENT_ID || Number(t.exp) * 1000 < Date.now()) return null;
+  return { email: t.email, name: t.name || t.email, picture: t.picture || '' };
+}
+
 function doPost(e) {
+  // navigator.sendBeacon ตอนปิดหน้า: ?action=leave&sid=...
+  if (e && e.parameter && e.parameter.action === 'leave') {
+    try { presence(e.parameter); } catch (err) { /* ไม่ต้องทำอะไร */ }
+    return reply({ ok: true });
+  }
   try {
     const p = JSON.parse(e.postData.contents);
     if (!/^image\//.test(p.mimeType || '')) throw new Error('รองรับเฉพาะไฟล์รูปภาพ');

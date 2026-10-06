@@ -33,6 +33,18 @@ header .meta{color:var(--muted);font-size:13px}
 header .spacer{flex:1}
 .edit-link{background:#fde3e1;color:#a3261b;padding:5px 12px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;border:1px solid #f5c2bd}
 .edit-link:hover{background:#fbd3cf}
+#presence{position:relative;font-size:13px}
+#presence summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+#presence summary::-webkit-details-marker{display:none}
+.avs{display:flex}
+.av{width:24px;height:24px;border-radius:50%;border:2px solid var(--panel);margin-left:-6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;object-fit:cover}
+.avs .av:first-child{margin-left:0}
+.dot{width:8px;height:8px;border-radius:50%;background:#2e9e5b}
+#presence .panel{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:8px;min-width:240px;max-height:60vh;overflow:auto}
+#presence .row{display:flex;align-items:center;gap:8px;padding:5px 4px}
+#presence .row .av{margin:0}
+#presence .row small{display:block;color:var(--muted)}
+#signin{display:flex;align-items:center;gap:6px;font-size:13px}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .edit-link{background:#3d1f1d;color:#ffb3ab;border-color:#5a2c28}}
 button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:6px;padding:5px 12px}
 button:hover{border-color:var(--accent)}
@@ -137,6 +149,8 @@ a{color:var(--accent)}
   <span class="meta" id="ver"></span>
   <span class="meta" id="status">กำลังโหลดข้อมูล…</span>
   <span class="spacer"></span>
+  <details id="presence" hidden></details>
+  <div id="signin"></div>
   <a id="sheetLink" class="edit-link" target="_blank" rel="noopener">เปิด Google Sheet เพื่อแก้ไข</a>
   <button id="reload">โหลดข้อมูลใหม่</button>
 </header>
@@ -153,10 +167,12 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261006.234723';
+const APP_VERSION = '20261006.235959';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbyQ6OsF8SjeISWk_PwsgSMdl-NRkXq1RuC-n4cMs4cw3P5dqBIMo8kbBkx-jaWJ8q1y/exec';
+// OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
+const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
 const TABS = [
   {name:'สรุป', gid:'750027123', summary:true},
@@ -602,6 +618,82 @@ async function uploadFiles(files){
   if(done) document.getElementById('status').textContent = `อัปโหลดรูปสำเร็จ ${done} ไฟล์`;
 }
 
+// ---------- ผู้ที่กำลังดู ----------
+const PING_SEC = 30;
+let sid = null;
+try{ sid = sessionStorage.getItem('sid'); }catch(e){}
+if(!sid){
+  sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+  try{ sessionStorage.setItem('sid', sid); }catch(e){}
+}
+let credential = null, me = null, meKey = undefined;
+async function ping(extra={}){
+  if(!UPLOAD_URL || location.protocol==='file:') return;
+  const q = new URLSearchParams({action:'ping', sid, ...extra});
+  const sentToken = !!(credential && !me && !extra.signout);
+  if(sentToken) q.set('token', credential); // ส่ง token เฉพาะครั้งแรก เซิร์ฟเวอร์จำไว้ต่อ
+  try{
+    const out = await jsonp(UPLOAD_URL + '?' + q);
+    if(!out.ok || !out.viewers) return; // สคริปต์เวอร์ชันเก่ายังไม่รองรับ
+    if(sentToken && !out.you) credential = null; // token ใช้ไม่ได้ ไม่ต้องส่งซ้ำ
+    me = out.you;
+    renderPresence(out);
+  }catch(e){}
+}
+function avatar(p){
+  return p.picture ? `<img class="av" src="${esc(p.picture)}" alt="" referrerpolicy="no-referrer" title="${esc(p.name)}">`
+    : `<span class="av" title="${esc(p.name)}">${esc((p.name||'?').trim().charAt(0).toUpperCase())}</span>`;
+}
+function renderPresence(out){
+  const box = document.getElementById('presence');
+  const people = out.viewers || [], total = people.length + (out.guests||0);
+  const wasOpen = box.open;
+  box.hidden = false;
+  box.innerHTML = `<summary title="ผู้ที่กำลังดูอยู่"><span class="dot"></span>กำลังดู ${total} คน
+      <span class="avs">${people.slice(0,5).map(avatar).join('')}</span></summary>
+    <div class="panel">
+      ${people.map(p=>`<div class="row">${avatar(p)}<div>${esc(p.name)}<small>${esc(p.email)}</small></div></div>`).join('')}
+      ${out.guests ? `<div class="row"><span class="av">?</span><div>ผู้เยี่ยมชม ${out.guests} คน<small>ไม่ได้เข้าสู่ระบบ</small></div></div>` : ''}
+    </div>`;
+  box.open = wasOpen;
+  const key = me ? me.email : null;
+  if(key !== meKey){ meKey = key; renderSignin(); }
+}
+function renderSignin(){
+  const box = document.getElementById('signin');
+  if(!GOOGLE_CLIENT_ID || !window.google?.accounts?.id){ box.innerHTML = ''; return; }
+  if(me){
+    box.innerHTML = `<span>${esc(me.name)}</span><button class="btn-sm" id="signout">ออกจากระบบ</button>`;
+    document.getElementById('signout').onclick = ()=>{
+      google.accounts.id.disableAutoSelect(); credential = null; me = null; ping({signout:1});
+    };
+    return;
+  }
+  box.innerHTML = '';
+  google.accounts.id.renderButton(box, {type:'standard', size:'small', text:'signin_with', shape:'pill', locale:'th'});
+}
+function initGoogleSignin(){
+  if(!GOOGLE_CLIENT_ID || location.protocol==='file:') return;
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+  s.onload = ()=>{
+    google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID, auto_select:true, cancel_on_tap_outside:true,
+      callback: r=>{ credential = r.credential; me = null; ping(); }});
+    renderSignin();
+    google.accounts.id.prompt(); // เข้าสู่ระบบอัตโนมัติถ้าเคยเข้าแล้ว
+  };
+  document.head.appendChild(s);
+}
+setInterval(()=>{ if(!document.hidden) ping(); }, PING_SEC*1000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) ping(); });
+window.addEventListener('pagehide', ()=>{
+  if(UPLOAD_URL && navigator.sendBeacon) navigator.sendBeacon(UPLOAD_URL + '?action=leave&sid=' + sid);
+});
+document.addEventListener('click', e=>{
+  const box = document.getElementById('presence');
+  if(box.open && !box.contains(e.target)) box.open = false;
+});
+
 function currentTab(){
   const h = decodeURIComponent(location.hash.slice(1));
   return TABS.find(t=>t.name===h) || TABS[0];
@@ -684,6 +776,8 @@ document.getElementById('ver').textContent = 'v' + APP_VERSION;
 checkVersion();
 render();
 loadAll();
+ping();
+initGoogleSignin();
 </script>
 </body>
 </html>
