@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สรุปการทดสอบ HOSxP XE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f6f9; --panel:#fff; --text:#1f2933; --muted:#6b7785; --line:#dde3ea;
+  --head:#eef2f6; --stripe:#f3f7fb; --zebra:rgba(255,255,255,.65);
+  --pass-bg:#e2f4e7; --pass-bg-s:#c8eacf; --fail-bg:#fce9e7; --fail-bg-s:#f6d2ce; --na-bg:#fdefdc; --na-bg-s:#f8dcb4;
+  --t1:#eef5fc; --t1s:#d7e8f8; --t2:#edf8f0; --t2s:#d3efdc; --t3:#fdf6e9; --t3s:#f6e5c3; --t4:#f4f0fb; --t4s:#e3daf5; --accent:#1d6fb8; --accent-soft:#e3effa;
+  --ok:#1f7a3d; --ok-bg:#e3f4e8; --bad:#b42318; --bad-bg:#fde8e6;
+  --warn:#8a5a00; --warn-bg:#fdf1d8; --wait:#4b5563; --wait-bg:#eceff3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181d; --panel:#1c2229; --text:#e4e8ec; --muted:#9aa5b1; --line:#2e3741;
+    --head:#232b34; --stripe:#212830; --zebra:rgba(255,255,255,.04);
+    --pass-bg:#1c3324; --pass-bg-s:#24442f; --fail-bg:#36201e; --fail-bg-s:#4a2a27; --na-bg:#372a18; --na-bg-s:#4a3820;
+    --t1:#1a2530; --t1s:#233648; --t2:#1a2a21; --t2s:#23402e; --t3:#2b251a; --t3s:#463a22; --t4:#241f30; --t4s:#372c4a; --accent:#5aa6e8; --accent-soft:#1f3346;
+    --ok:#6fd08f; --ok-bg:#183524; --bad:#ff8a80; --bad-bg:#3d1d1b;
+    --warn:#f2c26b; --warn-bg:#3a2e14; --wait:#b6bec8; --wait-bg:#2a313a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 "Sarabun",system-ui,sans-serif}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+header h1{font-size:19px;margin:0;font-weight:700}
+header .meta{color:var(--muted);font-size:13px}
+header .spacer{flex:1}
+.edit-link{background:#fde3e1;color:#a3261b;padding:5px 12px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;border:1px solid #f5c2bd}
+.edit-link:hover{background:#fbd3cf}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .edit-link{background:#3d1f1d;color:#ffb3ab;border-color:#5a2c28}}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:6px;padding:5px 12px}
+button:hover{border-color:var(--accent)}
+nav{display:flex;gap:4px;overflow-x:auto;padding:8px 16px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+nav{gap:6px;padding-bottom:0}
+nav a{white-space:nowrap;padding:7px 14px;border-radius:8px 8px 0 0;text-decoration:none;font-weight:600;
+  background:var(--mbg);color:var(--mfg);border:1px solid var(--mbd);border-bottom:none;opacity:.8}
+nav a:hover{opacity:1}
+nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg)}
+/* สีประจำเมนู (ลำดับตามแท็บ) */
+.m0{--mbg:#e6e9f7;--mbd:#c9d0f0;--mfg:#33409a}
+.m1{--mbg:#e3effa;--mbd:#c3dcf3;--mfg:#17599a}
+.m2{--mbg:#e3f4e7;--mbd:#c3e6cc;--mfg:#22703a}
+.m3{--mbg:#fdefdc;--mbd:#f7d9b0;--mfg:#9a4f0b}
+.m4{--mbg:#dff4f6;--mbd:#bbe5ea;--mfg:#0b6f80}
+.m5{--mbg:#f2e8f9;--mbd:#e0cdf0;--mfg:#6f3398}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .m0{--mbg:#232845;--mbd:#313968;--mfg:#b3bdf5}
+  :root:not([data-theme="light"]) .m1{--mbg:#1b2a3a;--mbd:#25405a;--mfg:#9ccaf2}
+  :root:not([data-theme="light"]) .m2{--mbg:#1b2f22;--mbd:#264532;--mfg:#9fdcb0}
+  :root:not([data-theme="light"]) .m3{--mbg:#33281a;--mbd:#4d3a22;--mfg:#f2c68e}
+  :root:not([data-theme="light"]) .m4{--mbg:#16303a;--mbd:#1f4855;--mfg:#8fd8e4}
+  :root:not([data-theme="light"]) .m5{--mbg:#2b2038;--mbd:#412f55;--mfg:#d4b3f0}
+}
+main{border-top:3px solid var(--mbd)}
+nav a .n{font-weight:400;font-size:12px;margin-left:4px}
+main{padding:16px}
+.filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+.filters label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:2px}
+.filters select,.filters input{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);min-width:150px;max-width:240px}
+.filters .count{margin-left:auto;color:var(--muted);font-size:13px;align-self:center}
+.tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 230px)}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--head);position:sticky;top:0;z-index:1;font-weight:600;white-space:nowrap}
+.data td{white-space:pre-line;font-size:14px}
+.data td.w-s{min-width:70px}
+.data td.w-m{min-width:140px}
+.data td.w-l{min-width:280px}
+.data td.w-xl{min-width:420px}
+.data td.w-mod{min-width:238px}
+.data tbody tr:nth-child(even) td,.sum tbody tr:nth-child(even):not(.total) td{background:var(--stripe)}
+.data tr:hover td,.sum tbody tr:not(.total):hover td{background:var(--accent-soft)}
+th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
+.data td.w-img{width:96px;min-width:96px;max-width:96px;white-space:normal}
+.imgcell{display:flex;flex-direction:column;gap:4px}
+.btn-sm{font-size:12px;padding:2px 6px;white-space:nowrap}
+.btn-sm.view{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.imgcell .note{font-size:12px;color:var(--muted);word-break:break-word}
+#viewer{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10;display:flex;align-items:center;justify-content:center;padding:16px}
+#viewer[hidden]{display:none}
+#viewer .box{background:var(--panel);border-radius:8px;max-width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;position:relative;padding:12px}
+#viewer .stage{flex:1;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:auto}
+#viewer .stage img{max-width:100%;max-height:calc(100vh - 120px);object-fit:contain}
+#viewer .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:8px;font-size:14px}
+#viewer .close{position:absolute;top:6px;right:6px;z-index:1}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:13px;white-space:nowrap;background:var(--wait-bg);color:var(--wait)}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.bad{background:var(--bad-bg);color:var(--bad)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+.cards{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.card{flex:1 1 auto;max-width:100%;background:var(--tint);border:1px solid var(--tint-strong);border-radius:8px;overflow:hidden}
+.card.full{flex-basis:100%}
+.card h2{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.card.collapsed{flex:0 1 auto}
+.card.collapsed .card-body{display:none}
+.card.c1{--tint:var(--t1);--tint-strong:var(--t1s)}
+.card.c2{--tint:var(--t2);--tint-strong:var(--t2s)}
+.card.c3{--tint:var(--t3);--tint-strong:var(--t3s)}
+.card.c4{--tint:var(--t4);--tint-strong:var(--t4s)}
+.card h2{font-size:15px;margin:0;padding:8px 10px;background:var(--tint-strong)}
+.card .sum th,.card .sum td{padding:4px 8px;font-size:13.5px;background:transparent}
+.card .sum th{white-space:normal;background:var(--tint-strong);border-bottom-color:var(--tint-strong)}
+.card .sum td{border-bottom-color:var(--tint-strong)}
+.card .sum tbody tr:nth-child(even):not(.total) td{background:var(--zebra)}
+.card .sum tr.total td{background:var(--tint-strong)}
+.card .sum tbody tr:not(.total):hover td{background:var(--accent-soft)}
+.card .sum .r-pass{background:var(--pass-bg)}
+.card .sum .r-fail{background:var(--fail-bg)}
+.card .sum .r-na{background:var(--na-bg)}
+.card .sum tr.total .r-pass,.card .sum th.r-pass{background:var(--pass-bg-s)}
+.card .sum tr.total .r-fail,.card .sum th.r-fail{background:var(--fail-bg-s)}
+.card .sum tr.total .r-na,.card .sum th.r-na{background:var(--na-bg-s)}
+.sum td,.sum th{text-align:right;font-variant-numeric:tabular-nums}
+.sum td:first-child,.sum th:first-child{text-align:left}
+.sum tr.total td{font-weight:700;background:var(--head)}
+.sum tr.sub td{color:var(--muted)}
+.sum td.z{color:var(--muted);opacity:.5}
+.err{color:var(--bad)}
+a{color:var(--accent)}
+@media (max-width:600px){
+  .filters select,.filters input{min-width:0;width:100%;max-width:none}
+  .filters label{flex:1 1 45%}
+  .cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>สรุปการทดสอบโปรแกรม HOSxP XE</h1>
+  <span class="meta" id="status">กำลังโหลดข้อมูล…</span>
+  <span class="spacer"></span>
+  <a id="sheetLink" class="edit-link" target="_blank" rel="noopener">เปิด Google Sheet เพื่อแก้ไข</a>
+  <button id="reload">โหลดข้อมูลใหม่</button>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<input type="file" id="fileInput" accept="image/*" multiple hidden>
+<div id="viewer" hidden>
+  <div class="box">
+    <button class="close" title="ปิด">✕</button>
+    <div class="stage"></div>
+    <div class="bar"><button class="nav-btn" data-step="-1">‹ ก่อนหน้า</button><span class="cap"></span><button class="nav-btn" data-step="1">ถัดไป ›</button></div>
+  </div>
+</div>
+
+<script>
+const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
+// URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
+const UPLOAD_URL = '';
+// แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
+const TABS = [
+  {name:'สรุป', gid:'750027123', summary:true},
+  {name:'HOSxP V4', gid:'653470496'},
+  {name:'PPL', gid:'1701737701'},
+  {name:'Inventory', gid:'407999886'},
+  {name:'Cloud', gid:'2062208758', result:'สถานะ'},
+  {name:'New Feture', gid:'1950255477', hide:['สถานะ']},
+];
+// ใช้กับชีทที่ไม่มีแถวหัวตาราง (PPL, Inventory)
+const STD_HEADERS = ['ลำดับ','วันที่','กลุ่ม','ประเภท','หัวข้อ','รายละเอียดย่อ','โมดูล/หน้าจอ','ปัญหาที่พบ','สิ่งที่แก้ไข','วิธีตรวจสอบ','ภาพ/วิดีโอประกอบ','ผลการทดสอบ','ผู้ตรวจสอบ','หมายเหตุ'];
+const FIELD_NAMES = {
+  group:['กลุ่ม','Module'],
+  type:['ประเภท'],
+  result:['ผลการทดสอบ','สถานะ'],
+  tester:['ผู้ตรวจสอบ','ผู้ทดสอบ'],
+};
+const FILTER_LABELS = {group:'กลุ่ม', type:'ประเภท', result:'ผลการทดสอบ', tester:'ผู้ทดสอบ'};
+const GROUP_ORDER = ['คลินิก','เภสัชกรรม','การเงิน','ส่งออก/ส่งเบิก','เชื่อมต่อระบบอื่น','ระบบภายใน'];
+const TYPE_ORDER = ['ของใหม่','ปรับปรุง','แก้ไข'];
+const BLANK = '(ไม่ระบุ)';
+const LONG_COLS = /รายละเอียด|ปัญหา|สิ่งที่แก้ไข|วิธีตรวจสอบ|หัวข้อ|New Fe|แก้ไขข้อผิดพลาด|รายการ/;
+const SHORT_COLS = /^ลำดับ$|^วันที่$/;
+
+const data = {};          // gid -> {headers, rows, f:{group,type,result,tester}} หรือ {error}
+const filters = {};       // tab name -> {group,type,result,tester,q,src}
+let loadedAt = null;
+
+document.getElementById('sheetLink').href = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=750027123#gid=750027123`;
+
+function parseCSV(text){
+  const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; }
+      else cell+=c;
+    } else if(c==='"') q=true;
+    else if(c===','){ row.push(cell); cell=''; }
+    else if(c==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; }
+    else if(c!=='\r') cell+=c;
+  }
+  if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+
+const isDate = s => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test((s||'').trim());
+const norm = s => (s||'').trim();
+
+function buildTable(raw){
+  // จำเลขแถวจริงในชีทไว้ใช้ตอนอัปโหลดรูป
+  raw.forEach((r,i)=>{ r.sheetRow = i+1; r.shift = 0; });
+  raw = raw.filter(r => r.some(c => c.trim()!==''));
+  if(!raw.length) return {headers:[], rows:[], meta:[]};
+  let headers, body;
+  const first = raw[0];
+  const hasHeader = !/^\d+$/.test(norm(first[0])) && !isDate(first[0]);
+  if(hasHeader){
+    headers = first.map((h,i)=> norm(h) || 'คอลัมน์ ' + String.fromCharCode(65+i));
+    body = raw.slice(1);
+  } else {
+    headers = STD_HEADERS.slice();
+    // บางแถวไม่มีลำดับ (เริ่มที่วันที่) ให้เลื่อนเข้าคอลัมน์ให้ตรง
+    body = raw.map(r => {
+      if(!isDate(r[0])) return r;
+      const a = [''].concat(r); a.sheetRow = r.sheetRow; a.shift = 1; return a;
+    });
+  }
+  // ชีทที่แบ่งเป็นส่วน (หัวตารางซ้ำกลางชีท เช่น New Feture): ใช้หัวคอลัมน์ที่ 2 เป็นประเภท
+  const sectioned = hasHeader && body.some(r => norm(r[0])===headers[0]);
+  let rows = [];
+  if(sectioned){
+    let section = headers[1];
+    for(const r of body){
+      if(norm(r[0])===headers[0]){ section = norm(r[1]); continue; }
+      const a = [r[0], section].concat(r.slice(1)); a.sheetRow = r.sheetRow; a.shift = 1; rows.push(a);
+    }
+    headers = [headers[0], 'ประเภท', 'รายการ'].concat(headers.slice(2));
+  } else rows = body;
+  const meta = rows.map(r=>({sheetRow:r.sheetRow, shift:r.shift}));
+  const width = Math.max(headers.length, ...rows.map(r=>r.length));
+  rows = rows.map(r => { const a=r.slice(); while(a.length<width) a.push(''); return a; });
+  for(let i=0;i<width;i++) if(!headers[i]) headers[i] = 'คอลัมน์ ' + String.fromCharCode(65+i);
+  // ตัดคอลัมน์ที่ไม่มีชื่อและไม่มีข้อมูลเลย
+  const keep = headers.map((h,i)=> !/^คอลัมน์ /.test(h) || rows.some(r=>norm(r[i])!==''));
+  const colIdx = headers.map((_,i)=>i).filter(i=>keep[i]); // ตำแหน่งคอลัมน์ก่อนตัด
+  headers = headers.filter((_,i)=>keep[i]);
+  rows = rows.map(r=>r.filter((_,i)=>keep[i]));
+  return {headers, rows, meta, colIdx};
+}
+
+// เลขคอลัมน์จริงในชีท (1-based) ของช่อง i ในแถว idx
+function sheetCol(t, idx, i){ return t.colIdx[i] - t.meta[idx].shift + 1; }
+
+function resolveFields(tab, headers){
+  const f={};
+  for(const k in FIELD_NAMES){
+    const names = (k==='result' && tab.result) ? [tab.result] : FIELD_NAMES[k];
+    f[k] = -1;
+    for(const n of names){ const i = headers.indexOf(n); if(i>=0){ f[k]=i; break; } }
+  }
+  f.image = headers.findIndex(h=>/^ภาพ/.test(h));
+  f.title = headers.indexOf('หัวข้อ');
+  f.no = headers.indexOf('ลำดับ');
+  f.date = headers.indexOf('วันที่');
+  return f;
+}
+
+async function loadAll(){
+  const st = document.getElementById('status');
+  if(location.protocol==='file:'){
+    st.textContent = 'เปิดจากไฟล์โดยตรงไม่ได้'; st.className='meta err';
+    document.getElementById('main').innerHTML = `<div class="empty err">Google Sheet ไม่อนุญาตให้ดึงข้อมูลจากหน้าเว็บที่เปิดเป็นไฟล์โดยตรง<br>
+      กรุณาดับเบิลคลิก <b>start.bat</b> ในโฟลเดอร์เดียวกัน (ระบบจะเปิดที่ http://localhost:4001/) หรือวางไฟล์ index.html ไว้บนเว็บเซิร์ฟเวอร์</div>`;
+    return;
+  }
+  st.textContent = 'กำลังโหลดข้อมูล…'; st.className='meta';
+  await Promise.all(TABS.filter(t=>!t.summary).map(async t=>{
+    try{
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${t.gid}&_=${Date.now()}`);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const tbl = buildTable(parseCSV(await res.text()));
+      tbl.f = resolveFields(t, tbl.headers);
+      data[t.gid] = tbl;
+    }catch(e){ data[t.gid] = {error:e.message, headers:[], rows:[], f:{}}; }
+  }));
+  loadedAt = new Date();
+  const errs = TABS.filter(t=>data[t.gid]?.error);
+  st.textContent = 'อัปเดตล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
+  if(errs.length) st.className='meta err';
+  render();
+}
+
+// ---------- helpers ----------
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+function resultClass(v){
+  v = norm(v);
+  if(!v || /^รอ|กำลัง/.test(v)) return '';
+  if(/ไม่ผ่าน/.test(v)) return 'bad';
+  if(/ไม่ได้|ไม่สามารถ/.test(v)) return 'warn';
+  if(/ผ่าน|เรียบร้อย|ตรวจสอบเเล้ว|ตรวจสอบแล้ว/.test(v)) return 'ok';
+  return '';
+}
+const val = (r,i) => i>=0 ? (norm(r[i]) || BLANK) : BLANK;
+
+function sortVals(arr, order){
+  return arr.sort((a,b)=>{
+    if(a===BLANK) return 1; if(b===BLANK) return -1;
+    const ia=order?order.indexOf(a):-1, ib=order?order.indexOf(b):-1;
+    if(ia>=0||ib>=0) return (ia<0?99:ia)-(ib<0?99:ib);
+    return a.localeCompare(b,'th');
+  });
+}
+function countBy(items, key){ const m=new Map(); for(const it of items){ m.set(it[key],(m.get(it[key])||0)+1); } return m; }
+
+// dd/mm/yyyy → yyyy-mm-dd (ใช้เทียบช่วงวันที่)
+function isoDate(s){ const m = norm(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : ''; }
+function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',src:'653470496'}; }
+
+function applyFilters(items, fl){
+  const q = fl.q.trim().toLowerCase();
+  return items.filter(it =>
+    (!fl.group || it.group===fl.group) && (!fl.type || it.type===fl.type) &&
+    (!fl.result || it.result===fl.result) && (!fl.tester || it.tester===fl.tester) &&
+    (!fl.from || (it.date && it.date>=fl.from)) && (!fl.to || (it.date && it.date<=fl.to)) &&
+    (!q || it.text.includes(q)));
+}
+
+function toItems(gid){
+  const t = data[gid]; if(!t) return [];
+  return t.rows.map((r,idx)=>({
+    row:r, gid, idx,
+    group:val(r,t.f.group), type:val(r,t.f.type), result:val(r,t.f.result), tester:val(r,t.f.tester), date:isoDate(t.f.date>=0 ? r[t.f.date] : ''),
+    text:r.join(' ').toLowerCase(),
+  }));
+}
+
+function filterBar(name, items, fl, extra=''){
+  const opt = (key, order) => {
+    const counts = countBy(items, key);
+    const vals = sortVals([...counts.keys()], order);
+    if(fl[key] && !counts.has(fl[key])) vals.push(fl[key]);
+    return `<label>${FILTER_LABELS[key]}<select data-k="${key}"><option value="">ทั้งหมด</option>${
+      vals.map(v=>`<option value="${esc(v)}"${v===fl[key]?' selected':''}>${esc(v)} (${counts.get(v)||0})</option>`).join('')}</select></label>`;
+  };
+  return `<div class="filters" data-tab="${esc(name)}">${extra}
+    ${opt('group',GROUP_ORDER)}${opt('type',TYPE_ORDER)}${opt('result')}${opt('tester')}
+    ${items.some(i=>i.date) ? `<label>ตั้งแต่วันที่<input data-k="from" type="date" value="${fl.from}"></label>
+    <label>ถึงวันที่<input data-k="to" type="date" value="${fl.to}"></label>` : ''}
+    <label>ค้นหา<input data-k="q" type="search" value="${esc(fl.q)}" placeholder="คำค้น…"></label>
+    <button data-clear>ล้างตัวกรอง</button>
+    <span class="count" id="count"></span></div>`;
+}
+
+// ---------- views ----------
+function renderSheet(tab){
+  const t = data[tab.gid];
+  if(t.error) return `<div class="empty err">โหลดชีท ${esc(tab.name)} ไม่สำเร็จ (${esc(t.error)})</div>`;
+  const fl = getFilter(tab.name);
+  const all = toItems(tab.gid);
+  const shown = applyFilters(all, fl);
+  const cls = h => h==='สิ่งที่แก้ไข' ? 'w-xl' : h==='โมดูล/หน้าจอ' ? 'w-mod' : SHORT_COLS.test(h) ? 'w-s' : LONG_COLS.test(h) ? 'w-l' : 'w-m';
+  const resCol = t.f.result;
+  // ลำดับคอลัมน์ที่แสดง: ย้ายผลการทดสอบมาต่อจากประเภท
+  // ไม่แสดงคอลัมน์ที่ไม่มีชื่อหัวในชีท (เช่น คอลัมน์ H ของ New Feture)
+  const order = t.headers.map((_,i)=>i).filter(i=>!/^คอลัมน์ /.test(t.headers[i]) && !(tab.hide||[]).includes(t.headers[i]));
+  const mv = t.headers.indexOf('ผลการทดสอบ') >= 0 ? t.headers.indexOf('ผลการทดสอบ') : resCol;
+  if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
+  const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
+      if(i===t.f.image) return imageCell(tab.gid, it.idx, c);
+      if(i===resCol && norm(c)) return `<td class="w-m"><span class="badge ${resultClass(c)}">${esc(norm(c))}</span></td>`;
+      return `<td class="${cls(t.headers[i])}">${linkify(norm(c))}</td>`;
+    }).join('')}</tr>`).join('');
+  return filterBar(tab.name, all, fl) +
+    `<div class="tablewrap"><table class="data"><thead><tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
+     <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>
+     <script type="x">${shown.length}/${all.length}<\/script>`;
+}
+
+const RESULT_BUCKETS = [
+  {name:'ทดสอบผ่าน', cls:'r-pass'},
+  {name:'ทดสอบไม่ผ่าน', cls:'r-fail'},
+  {name:'ทดสอบไม่ได้', cls:'r-na'},
+  {name:'รอทดสอบ', cls:''},
+];
+function resultBucket(v){
+  v = norm(v);
+  if(/ไม่ผ่าน/.test(v)) return 'ทดสอบไม่ผ่าน';
+  if(/ไม่ได้|ไม่สามารถ/.test(v)) return 'ทดสอบไม่ได้';
+  if(/ผ่าน/.test(v)) return 'ทดสอบผ่าน';
+  return 'รอทดสอบ';
+}
+
+// กล่องในหน้าสรุปที่ถูกซ่อน (จำไว้ในเบราว์เซอร์นี้)
+let hiddenCards = {};
+try{ hiddenCards = JSON.parse(localStorage.getItem('hiddenCards')||'{}'); }catch(e){}
+function card(id, cls, title, html){
+  const hid = !!hiddenCards[id];
+  return `<div class="card ${cls}${hid?' collapsed':''}"><h2><span>${title}</span>
+    <button class="btn-sm" data-card="${id}">${hid?'แสดง':'ซ่อน'}</button></h2>
+    <div class="card-body" style="overflow:auto">${html}</div></div>`;
+}
+
+function renderSummary(tab){
+  const fl = getFilter(tab.name);
+  const sources = TABS.filter(t=>!t.summary);
+  const gids = fl.src==='all' ? sources.map(t=>t.gid) : [fl.src];
+  // หน้าสรุปจัดผลการทดสอบเป็น 4 กลุ่ม (ค่าอื่นนับเป็นรอทดสอบ)
+  const all = gids.flatMap(toItems).map(i=>({...i, result:resultBucket(i.result)}));
+  const items = applyFilters(all, fl);
+  const srcSel = `<label>ข้อมูลจากชีท<select data-k="src">${
+    sources.map(t=>`<option value="${t.gid}"${fl.src===t.gid?' selected':''}>${esc(t.name)} (${data[t.gid]?.rows.length||0})</option>`).join('')
+  }<option value="all"${fl.src==='all'?' selected':''}>ทุกชีทรวมกัน</option></select></label>`;
+
+  const groups = sortVals([...new Set(items.map(i=>i.group))], GROUP_ORDER);
+  const types = sortVals([...new Set(items.map(i=>i.type))], TYPE_ORDER);
+  const testers = sortVals([...new Set(items.map(i=>i.tester))]);
+  const n = (arr, pred) => arr.filter(pred).length;
+  const cell = (v, c='') => `<td class="${c}${v?'':' z'}">${v}</td>`;
+  const resHead = RESULT_BUCKETS.map(b=>`<th class="${b.cls}">${b.name}</th>`).join('');
+  const resCells = arr => RESULT_BUCKETS.map(b=>cell(n(arr,i=>i.result===b.name), b.cls)).join('');
+  const resTotal = RESULT_BUCKETS.map(b=>`<td class="${b.cls}">${n(items,i=>i.result===b.name)}</td>`).join('');
+
+  // 1) กลุ่ม × ประเภท + ผลการทดสอบ
+  const t1 = `<table class="sum"><thead><tr><th>กลุ่ม</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
+    ${groups.map(g=>{ const gi=items.filter(i=>i.group===g);
+      return `<tr><td>${esc(g)}</td>${types.map(t=>cell(n(gi,i=>i.type===t))).join('')}<td><b>${gi.length}</b></td>${resCells(gi)}</tr>`; }).join('')}
+    <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${resTotal}</tr>
+    </tbody></table>`;
+
+  // 2) ประเภท × ผลการทดสอบ
+  const t3 = `<table class="sum"><thead><tr><th>ประเภท</th>${resHead}<th>รวม</th></tr></thead><tbody>
+    ${types.map(t=>{ const ti=items.filter(i=>i.type===t);
+      return `<tr><td>${esc(t)}</td>${resCells(ti)}<td><b>${ti.length}</b></td></tr>`; }).join('')}
+    <tr class="total"><td>รวมทั้งหมด</td>${resTotal}<td>${items.length}</td></tr></tbody></table>`;
+
+  // 3) ผู้ทดสอบ
+  const t4 = `<table class="sum"><thead><tr><th>ผู้ทดสอบ</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
+    ${testers.map(p=>{ const pi=items.filter(i=>i.tester===p);
+      return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${resCells(pi)}</tr>`; }).join('')}
+    <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${resTotal}</tr></tbody></table>`;
+
+  return filterBar(tab.name, all, fl, srcSel) +
+    (items.length ? `<div class="cards">
+      ${card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1)}
+      ${card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3)}
+      ${card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4)}
+    </div>` : `<div class="empty">ไม่พบรายการ</div>`) +
+    `<script type="x">${items.length}/${all.length}<\/script>`;
+}
+
+// ---------- ภาพประกอบ ----------
+const URL_RE = /https?:\/\/[^\s<>"]+/g;
+function driveId(u){ const m = u.match(/\/d\/([\w-]{20,})|[?&]id=([\w-]{20,})/); return m ? (m[1]||m[2]) : null; }
+function mediaOf(cell){
+  const urls = norm(cell).match(URL_RE) || [];
+  const note = norm(norm(cell).replace(URL_RE,'')).replace(/^-$/,'');
+  return {urls, note};
+}
+function imageCell(gid, idx, cell){
+  const {urls, note} = mediaOf(cell);
+  const key = `${gid}:${idx}`;
+  return `<td class="w-img"><div class="imgcell">
+    ${urls.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${urls.length})</button>` : ''}
+    <button class="btn-sm" data-up="${key}">อัปโหลด</button>
+    ${note ? `<div class="note">${esc(note)}</div>` : ''}</div></td>`;
+}
+
+let viewer = {list:[], i:0};
+function openViewer(urls){ viewer = {list:urls, i:0}; showViewer(); }
+function showViewer(){
+  const box = document.getElementById('viewer');
+  const u = viewer.list[viewer.i], id = driveId(u);
+  const isImg = id || /\.(png|jpe?g|gif|webp|bmp)(\?|$)/i.test(u);
+  const src = id ? `https://drive.google.com/thumbnail?id=${id}&sz=w2000` : u;
+  box.querySelector('.stage').innerHTML = isImg
+    ? `<img src="${esc(src)}" alt="ภาพประกอบ" onerror="if(!this.dataset.f&&'${id||''}'){this.dataset.f=1;this.src='https://lh3.googleusercontent.com/d/${id||''}'}">`
+    : `<div class="empty">ไฟล์นี้แสดงตัวอย่างไม่ได้ (อาจเป็นวิดีโอหรือเว็บเพจ)<br><a href="${esc(u)}" target="_blank" rel="noopener">เปิดลิงก์</a></div>`;
+  box.querySelector('.cap').innerHTML = `${viewer.i+1} / ${viewer.list.length} · <a href="${esc(u)}" target="_blank" rel="noopener">เปิดในแท็บใหม่</a>`;
+  box.querySelectorAll('.nav-btn').forEach(b=>b.style.visibility = viewer.list.length>1 ? 'visible' : 'hidden');
+  box.hidden = false;
+}
+function stepViewer(d){ viewer.i = (viewer.i + d + viewer.list.length) % viewer.list.length; showViewer(); }
+
+// ย่อรูปก่อนส่ง (ด้านยาวสุดไม่เกิน 1920px) เพื่อให้อัปโหลดเร็ว
+function prepareImage(file){
+  return new Promise((resolve, reject)=>{
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, 1920/Math.max(img.width, img.height));
+      if(scale===1 && file.size < 2e6 && /png|jpe?g|webp/.test(file.type)){
+        const fr = new FileReader();
+        fr.onload = ()=>resolve({data:fr.result.split(',')[1], mimeType:file.type, filename:file.name});
+        fr.onerror = reject; fr.readAsDataURL(file); return;
+      }
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width*scale); c.height = Math.round(img.height*scale);
+      const ctx = c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve({data:c.toDataURL('image/jpeg',0.85).split(',')[1], mimeType:'image/jpeg', filename:file.name.replace(/\.\w+$/,'')+'.jpg'});
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('อ่านไฟล์รูปไม่ได้: '+file.name)); };
+    img.src = url;
+  });
+}
+
+let uploadTarget = null;
+async function uploadFiles(files){
+  const [gid, idxStr] = uploadTarget.split(':'); const idx = +idxStr;
+  const t = data[gid], col = t.f.image;
+  const match = [t.f.title, t.f.no].filter(i=>i>=0 && norm(t.rows[idx][i]))
+    .map(i=>({col:sheetCol(t, idx, i), value:norm(t.rows[idx][i])}));
+  const btn = document.querySelector(`[data-up="${uploadTarget}"]`);
+  let done = 0;
+  try{
+    for(const f of files){
+      if(btn) btn.textContent = `กำลังส่ง ${done+1}/${files.length}…`;
+      const img = await prepareImage(f);
+      const res = await fetch(UPLOAD_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({...img, gid, row:t.meta[idx].sheetRow, col:sheetCol(t, idx, col), match})});
+      const out = await res.json();
+      if(!out.ok) throw new Error(out.error);
+      t.rows[idx][col] = out.value;
+      t.meta[idx].sheetRow = out.row;
+      done++;
+    }
+  }catch(e){ alert('อัปโหลดไม่สำเร็จ: ' + e.message); }
+  render();
+  if(done) document.getElementById('status').textContent = `อัปโหลดรูปสำเร็จ ${done} ไฟล์ · บันทึกลิงก์ลง Google Sheet แล้ว`;
+}
+
+function currentTab(){
+  const h = decodeURIComponent(location.hash.slice(1));
+  return TABS.find(t=>t.name===h) || TABS[0];
+}
+
+function render(){
+  const tab = currentTab();
+  document.getElementById('nav').innerHTML = TABS.map(t=>{
+    const cnt = t.summary ? '' : `<span class="n">${data[t.gid] ? data[t.gid].rows.length : ''}</span>`;
+    return `<a href="#${encodeURIComponent(t.name)}" class="m${TABS.indexOf(t)%6}${t===tab?' active':''}">${esc(t.name)}${cnt}</a>`;
+  }).join('');
+  document.getElementById('main').className = 'm' + TABS.indexOf(tab)%6;
+  const main = document.getElementById('main');
+  if(!loadedAt){ main.innerHTML = '<div class="empty">กำลังโหลดข้อมูลจาก Google Sheet…</div>'; return; }
+  main.innerHTML = tab.summary ? renderSummary(tab) : renderSheet(tab);
+  const meta = main.querySelector('script[type=x]');
+  if(meta){ const [a,b]=meta.textContent.split('/'); document.getElementById('count').textContent = `แสดง ${a} จาก ${b} รายการ`; }
+}
+
+document.getElementById('main').addEventListener('change', e=>{
+  const k = e.target.dataset.k; if(!k || k==='q') return;
+  const fl = getFilter(currentTab().name); fl[k] = e.target.value;
+  if(k==='src'){ fl.group=fl.type=fl.result=fl.tester=''; }
+  render();
+});
+let qTimer;
+document.getElementById('main').addEventListener('input', e=>{
+  if(e.target.dataset.k!=='q') return;
+  clearTimeout(qTimer);
+  qTimer = setTimeout(()=>{
+    getFilter(currentTab().name).q = e.target.value; render();
+    const inp = document.querySelector('input[data-k=q]'); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  }, 250);
+});
+document.getElementById('main').addEventListener('click', e=>{
+  const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
+  if(v){ const [gid, idx] = v.dataset.view.split(':'); const t = data[gid]; openViewer(mediaOf(t.rows[idx][t.f.image]).urls); return; }
+  if(u){
+    if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่าระบบอัปโหลด\nกรุณาติดตั้ง Apps Script ตามขั้นตอนในไฟล์ apps-script/Code.gs แล้วใส่ URL ในค่า UPLOAD_URL ของ index.html'); return; }
+    uploadTarget = u.dataset.up; const inp = document.getElementById('fileInput'); inp.value = ''; inp.click(); return;
+  }
+  const cb = e.target.closest('[data-card]');
+  if(cb){
+    const id = cb.dataset.card; hiddenCards[id] = !hiddenCards[id];
+    try{ localStorage.setItem('hiddenCards', JSON.stringify(hiddenCards)); }catch(err){}
+    render(); return;
+  }
+  if(!e.target.hasAttribute('data-clear')) return;
+  const fl = getFilter(currentTab().name); Object.assign(fl,{group:'',type:'',result:'',tester:'',from:'',to:'',q:''}); render();
+});
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const files = [...e.target.files]; if(files.length && uploadTarget) uploadFiles(files);
+});
+document.getElementById('viewer').addEventListener('click', e=>{
+  if(e.target.dataset.step) stepViewer(+e.target.dataset.step);
+  else if(e.target.classList.contains('close') || e.target.id==='viewer') document.getElementById('viewer').hidden = true;
+});
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('viewer').hidden) return;
+  if(e.key==='Escape') document.getElementById('viewer').hidden = true;
+  if(e.key==='ArrowRight') stepViewer(1);
+  if(e.key==='ArrowLeft') stepViewer(-1);
+});
+window.addEventListener('hashchange', render);
+document.getElementById('reload').addEventListener('click', loadAll);
+render();
+loadAll();
+</script>
+</body>
+</html>
