@@ -153,7 +153,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261006.234107';
+const APP_VERSION = '20261006.234723';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbyQ6OsF8SjeISWk_PwsgSMdl-NRkXq1RuC-n4cMs4cw3P5dqBIMo8kbBkx-jaWJ8q1y/exec';
@@ -265,7 +265,7 @@ function resolveFields(tab, headers){
   return f;
 }
 
-async function loadAll(){
+async function loadAll(silent=false){
   const st = document.getElementById('status');
   if(location.protocol==='file:'){
     st.textContent = 'เปิดจากไฟล์โดยตรงไม่ได้'; st.className='meta err';
@@ -273,23 +273,54 @@ async function loadAll(){
       กรุณาดับเบิลคลิก <b>start.bat</b> ในโฟลเดอร์เดียวกัน (ระบบจะเปิดที่ http://localhost:4001/) หรือวางไฟล์ index.html ไว้บนเว็บเซิร์ฟเวอร์</div>`;
     return;
   }
-  st.textContent = 'กำลังโหลดข้อมูล…'; st.className='meta';
+  if(!silent){ st.textContent = 'กำลังโหลดข้อมูล…'; st.className='meta'; }
+  let changed = !silent;
   await Promise.all(TABS.filter(t=>!t.summary).map(async t=>{
     try{
-      const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${t.gid}&_=${Date.now()}`);
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${t.gid}&_=${Date.now()}`, {cache:'no-store'});
       if(!res.ok) throw new Error('HTTP '+res.status);
-      const tbl = buildTable(parseCSV(await res.text()));
+      const text = await res.text();
+      if(silent && data[t.gid] && data[t.gid].raw===text) return; // ไม่มีการเปลี่ยนแปลง
+      const tbl = buildTable(parseCSV(text));
       tbl.f = resolveFields(t, tbl.headers);
-      data[t.gid] = tbl;
-    }catch(e){ data[t.gid] = {error:e.message, headers:[], rows:[], f:{}}; }
+      tbl.raw = text;
+      data[t.gid] = tbl; changed = true;
+    }catch(e){
+      if(silent && data[t.gid] && !data[t.gid].error) return; // อัปเดตอัตโนมัติพลาด: ใช้ข้อมูลเดิมต่อ
+      data[t.gid] = {error:e.message, headers:[], rows:[], f:{}}; changed = true;
+    }
   }));
   loadedAt = new Date();
-  loadDriveList().then(render).catch(e=>console.warn('รายการรูป:', e.message));
+  if(!silent || ++refreshCount % 4 === 0){
+    loadDriveList().then(()=>silent ? softRender() : render()).catch(e=>console.warn('รายการรูป:', e.message));
+  }
   const errs = TABS.filter(t=>data[t.gid]?.error);
   st.textContent = 'อัปเดตล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
-  if(errs.length) st.className='meta err';
-  render();
+  st.className = errs.length ? 'meta err' : 'meta';
+  if(changed) silent ? softRender() : render();
 }
+
+// อัปเดตข้อมูลจาก Google Sheet อัตโนมัติ
+const AUTO_REFRESH_SEC = 30;
+let refreshCount = 0, uploading = false;
+function canAutoRefresh(){
+  const a = document.activeElement;
+  return !document.hidden && !uploading && document.getElementById('viewer').hidden
+    && !(a && (a.tagName==='SELECT' || a.tagName==='INPUT'));
+}
+// วาดใหม่โดยคงตำแหน่งเลื่อนหน้าจอไว้
+function softRender(){
+  const wrap = document.querySelector('.tablewrap');
+  const pos = {x:scrollX, y:scrollY, wx:wrap?.scrollLeft, wy:wrap?.scrollTop};
+  render();
+  scrollTo(pos.x, pos.y);
+  const w2 = document.querySelector('.tablewrap');
+  if(w2 && wrap){ w2.scrollLeft = pos.wx; w2.scrollTop = pos.wy; }
+}
+setInterval(()=>{ if(loadedAt && canAutoRefresh()) loadAll(true); }, AUTO_REFRESH_SEC*1000);
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && loadedAt && Date.now()-loadedAt > AUTO_REFRESH_SEC*1000 && canAutoRefresh()) loadAll(true);
+});
 
 // ---------- helpers ----------
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -549,6 +580,7 @@ async function uploadFiles(files){
   const sheetName = (TABS.find(x=>x.gid===gid)||{}).name || '';
   const btn = document.querySelector(`[data-up="${uploadTarget}"]`);
   let done = 0;
+  uploading = true;
   try{
     for(const f of files){
       if(btn) btn.textContent = `กำลังส่ง ${done+1}/${files.length}…`;
@@ -565,6 +597,7 @@ async function uploadFiles(files){
       done++;
     }
   }catch(e){ alert('อัปโหลดไม่สำเร็จ: ' + e.message); }
+  uploading = false;
   render();
   if(done) document.getElementById('status').textContent = `อัปโหลดรูปสำเร็จ ${done} ไฟล์`;
 }
@@ -633,7 +666,7 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowLeft') stepViewer(-1);
 });
 window.addEventListener('hashchange', render);
-document.getElementById('reload').addEventListener('click', loadAll);
+document.getElementById('reload').addEventListener('click', ()=>loadAll());
 // ถ้าเบราว์เซอร์แสดงเวอร์ชันเก่าที่จำไว้ ให้โหลดเวอร์ชันล่าสุดใหม่อัตโนมัติ
 async function checkVersion(){
   if(location.protocol==='file:') return;
