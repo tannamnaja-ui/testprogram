@@ -1,4 +1,6 @@
 # Local web server for index.html (Google Sheets blocks requests from file:// pages)
+# -NoBrowser: run in the background without opening the browser (used by start-hidden.vbs)
+param([switch]$NoBrowser)
 $port = 4001
 $url = "http://localhost:$port/"
 $page = Join-Path $PSScriptRoot 'index.html'
@@ -7,12 +9,12 @@ $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($url)
 try { $listener.Start() }
 catch {
-  # Already running in another window: just open the browser
-  Start-Process $url
+  # Already running: just open the browser
+  if (-not $NoBrowser) { Start-Process $url }
   exit
 }
 
-Start-Process $url
+if (-not $NoBrowser) { Start-Process $url }
 Write-Host "HOSxP XE test summary is running at $url"
 Write-Host "Close this window to stop."
 

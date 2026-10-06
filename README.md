@@ -4,7 +4,12 @@
 
 ## วิธีเปิดใช้งาน
 
-ดับเบิลคลิก `start.bat` ระบบจะเปิดที่ http://localhost:4001/
+ใช้งานผ่านเว็บได้ที่ https://tannamnaja-ui.github.io/testprogram/
+
+ถ้าจะเปิดจากเครื่องตัวเอง ดับเบิลคลิก `start.bat` ระบบจะเปิดที่ http://localhost:4001/ (มีหน้าต่าง command ค้างไว้)
+
+ให้รันเบื้องหลังตลอดเวลาโดยไม่มีหน้าต่าง: ดับเบิลคลิก `install-autostart.bat` ครั้งเดียว ระบบจะเริ่มเองทุกครั้งที่เข้า Windows
+ยกเลิก: ดับเบิลคลิก `uninstall-autostart.bat`
 
 ห้ามเปิด `index.html` จากไฟล์โดยตรง เพราะ Google Sheet ไม่อนุญาตให้หน้าเว็บที่เปิดแบบนั้นดึงข้อมูล ถ้าจะให้คนอื่นใช้ ให้วาง `index.html` ไว้บนเว็บเซิร์ฟเวอร์ (เช่น IIS) ก็ได้
 
@@ -26,4 +31,5 @@
 |---|---|
 | `index.html` | หน้าเว็บทั้งหมด |
 | `server.ps1`, `start.bat` | เว็บเซิร์ฟเวอร์ในเครื่อง ใช้พอร์ต 4001 |
+| `start-hidden.vbs`, `install-autostart.bat`, `uninstall-autostart.bat` | รันเซิร์ฟเวอร์เบื้องหลังและเริ่มพร้อม Windows |
 | `apps-script/Code.gs` | สคริปต์รับรูป บันทึกลง Drive และเขียนลิงก์ลงชีท |
