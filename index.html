@@ -153,7 +153,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261006.233350';
+const APP_VERSION = '20261006.233810';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbz19D0rVxx7sNjEj-6g5S8Zj4tCHzZKoFDaUWjYNq2HaGv0ahxVvP7hk3xBuuQw15gg/exec';
@@ -284,6 +284,7 @@ async function loadAll(){
     }catch(e){ data[t.gid] = {error:e.message, headers:[], rows:[], f:{}}; }
   }));
   loadedAt = new Date();
+  loadDriveList().then(render).catch(e=>console.warn('รายการรูป:', e.message));
   const errs = TABS.filter(t=>data[t.gid]?.error);
   st.textContent = 'อัปเดตล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
   if(errs.length) st.className='meta err';
@@ -367,7 +368,7 @@ function renderSheet(tab){
   const mv = t.headers.indexOf('ผลการทดสอบ') >= 0 ? t.headers.indexOf('ผลการทดสอบ') : resCol;
   if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
-      if(i===t.f.image) return imageCell(tab.gid, it.idx, c);
+      if(i===t.f.image) return imageCell(tab.gid, it.idx);
       if(i===resCol && norm(c)) return `<td class="w-m"><span class="badge ${resultClass(c)}">${esc(norm(c))}</span></td>`;
       return `<td class="${cls(t.headers[i])}">${linkify(norm(c))}</td>`;
     }).join('')}</tr>`).join('');
@@ -457,8 +458,42 @@ function mediaOf(cell){
   const note = norm(norm(cell).replace(URL_RE,'')).replace(/^-$/,'');
   return {urls, note};
 }
-function imageCell(gid, idx, cell){
-  const {urls, note} = mediaOf(cell);
+// รูปที่อัปโหลดผ่านระบบ: ดึงรายการจากโฟลเดอร์ Drive (คีย์ = gid|หัวข้อ)
+let driveFiles = {};
+function rowKey(gid, idx){
+  const t = data[gid];
+  return gid + '|' + (t.f.title>=0 ? norm(t.rows[idx][t.f.title]) : '#' + t.meta[idx].sheetRow);
+}
+function rowMedia(gid, idx){
+  const t = data[gid];
+  const {urls, note} = mediaOf(t.rows[idx][t.f.image]);
+  const seen = new Set(urls.map(driveId).filter(Boolean));
+  for(const f of driveFiles[rowKey(gid, idx)] || []){
+    if(!seen.has(f.id)){ seen.add(f.id); urls.push(`https://drive.google.com/file/d/${f.id}/view`); }
+  }
+  return {urls, note};
+}
+function jsonp(url){
+  return new Promise((resolve, reject)=>{
+    const cb = 'jp' + Date.now() + Math.floor(Math.random()*1e6), s = document.createElement('script');
+    const done = ()=>{ delete window[cb]; s.remove(); clearTimeout(timer); };
+    const timer = setTimeout(()=>{ done(); reject(new Error('หมดเวลารอรายการรูป')); }, 30000);
+    window[cb] = d=>{ done(); resolve(d); };
+    s.onerror = ()=>{ done(); reject(new Error('โหลดรายการรูปไม่สำเร็จ')); };
+    s.src = url + (url.includes('?')?'&':'?') + 'callback=' + cb + '&_=' + Date.now();
+    document.head.appendChild(s);
+  });
+}
+async function loadDriveList(){
+  if(!UPLOAD_URL) return;
+  const out = await jsonp(UPLOAD_URL + '?action=list');
+  if(!out.ok) throw new Error(out.error);
+  const map = {};
+  for(const f of out.files) (map[f.key] ||= []).push(f);
+  driveFiles = map;
+}
+function imageCell(gid, idx){
+  const {urls, note} = rowMedia(gid, idx);
   const key = `${gid}:${idx}`;
   return `<td class="w-img"><div class="imgcell">
     ${urls.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${urls.length})</button>` : ''}
@@ -505,53 +540,33 @@ function prepareImage(file){
   });
 }
 
-// โหลดชีทใหม่แล้วดูว่าช่องภาพของแถวนี้มีลิงก์เพิ่มขึ้นหรือไม่
-async function checkUploaded(gid, idx, before){
-  const t = data[gid], title = norm(t.rows[idx][t.f.title]);
-  try{
-    const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&_=${Date.now()}`);
-    const fresh = buildTable(parseCSV(await res.text()));
-    const j = fresh.rows.findIndex(r=>norm(r[t.f.title])===title);
-    if(j<0) return null;
-    const value = fresh.rows[j][t.f.image];
-    if(mediaOf(value).urls.length <= before) return null;
-    return {ok:true, value, row:fresh.meta[j].sheetRow};
-  }catch(e){ return null; }
-}
-
 let uploadTarget = null;
 async function uploadFiles(files){
   const [gid, idxStr] = uploadTarget.split(':'); const idx = +idxStr;
-  const t = data[gid], col = t.f.image;
+  const t = data[gid], col = t.f.image, key = rowKey(gid, idx);
   const match = [t.f.title, t.f.no].filter(i=>i>=0 && norm(t.rows[idx][i]))
     .map(i=>({col:sheetCol(t, idx, i), value:norm(t.rows[idx][i])}));
+  const sheetName = (TABS.find(x=>x.gid===gid)||{}).name || '';
   const btn = document.querySelector(`[data-up="${uploadTarget}"]`);
   let done = 0;
   try{
     for(const f of files){
       if(btn) btn.textContent = `กำลังส่ง ${done+1}/${files.length}…`;
       const img = await prepareImage(f);
-      const before = mediaOf(t.rows[idx][col]).urls.length;
-      let out;
-      try{
-        const res = await fetch(UPLOAD_URL, {method:'POST', credentials:'omit', redirect:'follow',
-          headers:{'Content-Type':'text/plain;charset=utf-8'},
-          body: JSON.stringify({...img, gid, row:t.meta[idx].sheetRow, col:sheetCol(t, idx, col), match})});
-        out = await res.json();
-      }catch(netErr){
-        // เบราว์เซอร์อ่านคำตอบไม่ได้ แต่ Google อาจบันทึกสำเร็จแล้ว: ตรวจจากชีทโดยตรง
-        if(btn) btn.textContent = 'กำลังตรวจสอบ…';
-        out = await checkUploaded(gid, idx, before);
-        if(!out) throw new Error(netErr.message + '\n(ตรวจในชีทแล้วยังไม่พบลิงก์รูป)');
-      }
-      if(!out.ok) throw new Error(out.error);
-      t.rows[idx][col] = out.value;
-      t.meta[idx].sheetRow = out.row;
+      const before = (driveFiles[key] || []).length;
+      // ส่งแบบ no-cors (ไม่ต้องอ่านคำตอบ จึงไม่ติด CORS ของเบราว์เซอร์) แล้วยืนยันจากรายการรูปใน Drive
+      await fetch(UPLOAD_URL, {method:'POST', mode:'no-cors', credentials:'omit',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({...img, gid, key, sheetName, no: t.f.no>=0 ? norm(t.rows[idx][t.f.no]) : '',
+          row:t.meta[idx].sheetRow, col:sheetCol(t, idx, col), match})});
+      if(btn) btn.textContent = 'กำลังตรวจสอบ…';
+      await loadDriveList();
+      if((driveFiles[key] || []).length <= before) throw new Error('ส่งรูปแล้วแต่ไม่พบรูปในโฟลเดอร์ Drive (' + f.name + ')');
       done++;
     }
   }catch(e){ alert('อัปโหลดไม่สำเร็จ: ' + e.message); }
   render();
-  if(done) document.getElementById('status').textContent = `อัปโหลดรูปสำเร็จ ${done} ไฟล์ · บันทึกลิงก์ลง Google Sheet แล้ว`;
+  if(done) document.getElementById('status').textContent = `อัปโหลดรูปสำเร็จ ${done} ไฟล์`;
 }
 
 function currentTab(){
@@ -590,7 +605,7 @@ document.getElementById('main').addEventListener('input', e=>{
 });
 document.getElementById('main').addEventListener('click', e=>{
   const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
-  if(v){ const [gid, idx] = v.dataset.view.split(':'); const t = data[gid]; openViewer(mediaOf(t.rows[idx][t.f.image]).urls); return; }
+  if(v){ const [gid, idx] = v.dataset.view.split(':'); openViewer(rowMedia(gid, +idx).urls); return; }
   if(u){
     if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่าระบบอัปโหลด\nกรุณาติดตั้ง Apps Script ตามขั้นตอนในไฟล์ apps-script/Code.gs แล้วใส่ URL ในค่า UPLOAD_URL ของ index.html'); return; }
     uploadTarget = u.dataset.up; const inp = document.getElementById('fileInput'); inp.value = ''; inp.click(); return;

@@ -1,7 +1,9 @@
 /**
- * รับรูปจากหน้า "สรุปการทดสอบ HOSxP XE" → เก็บใน Google Drive → เขียนลิงก์ลงคอลัมน์ภาพของแถวนั้น
+ * รับรูปจากหน้า "สรุปการทดสอบ HOSxP XE" → เก็บใน Google Drive (ระบุข้อที่อัปโหลดไว้ในคำอธิบายไฟล์)
+ * → พยายามเขียนลิงก์ลงคอลัมน์ภาพของแถวนั้นด้วย
+ * หน้าเว็บดึงรายการรูปจากโฟลเดอร์ (doGet?action=list) มาแสดงที่ปุ่ม "ดูรูป" ของแต่ละข้อ
  *
- * วิธีติดตั้ง (ทำครั้งเดียว ด้วยบัญชีที่แก้ไข Google Sheet ได้)
+ * วิธีติดตั้ง (ทำครั้งเดียว ด้วยบัญชีที่แก้ไข Google Sheet และโฟลเดอร์ Drive ได้)
  * 1. เปิด Google Sheet > ส่วนขยาย (Extensions) > Apps Script
  * 2. ลบโค้ดเดิมในไฟล์ Code.gs แล้ววางโค้ดทั้งหมดนี้ > กดบันทึก
  * 3. กด ทำให้ใช้งานได้ (Deploy) > การทำให้ใช้งานได้รายการใหม่ (New deployment)
@@ -11,47 +13,81 @@
  * 4. กด Deploy > อนุญาตสิทธิ์ (Authorize) > คัดลอก URL ของเว็บแอป (ลงท้ายด้วย /exec)
  * 5. นำ URL ไปใส่ในค่า UPLOAD_URL ช่วงต้นของสคริปต์ในไฟล์ index.html
  *
- * ถ้าแก้โค้ดนี้ภายหลัง ต้อง Deploy > จัดการการทำให้ใช้งานได้ > แก้ไข > เวอร์ชันใหม่ ทุกครั้ง
+ * ถ้าแก้โค้ดนี้ภายหลัง ต้อง Deploy > จัดการการทำให้ใช้งานได้ > แก้ไข (ดินสอ) > เวอร์ชันใหม่ ทุกครั้ง
  */
 const SPREADSHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // โฟลเดอร์เก็บรูป: https://drive.google.com/drive/u/0/folders/1fwD2jPox8GojPEENajr2jLTt_9NUfZTH
 const FOLDER_ID = '1fwD2jPox8GojPEENajr2jLTt_9NUfZTH';
 const MAX_BYTES = 15 * 1024 * 1024;
+const KEY_PREFIX = 'row:';
 
-function doGet() {
-  return json({ ok: true, message: 'upload service is running' });
+// GET ?action=list → รายการรูปทั้งหมดพร้อมข้อที่อัปโหลด (รองรับ ?callback= แบบ JSONP)
+function doGet(e) {
+  const prm = (e && e.parameter) || {};
+  let out;
+  if (prm.action === 'list') {
+    try {
+      const files = [];
+      const it = getFolder().getFiles();
+      while (it.hasNext()) {
+        const f = it.next();
+        const desc = f.getDescription() || '';
+        if (desc.indexOf(KEY_PREFIX) !== 0) continue;
+        files.push({ id: f.getId(), key: desc.slice(KEY_PREFIX.length), name: f.getName(), created: f.getDateCreated().getTime() });
+      }
+      files.sort((a, b) => a.created - b.created);
+      out = { ok: true, files };
+    } catch (err) {
+      out = { ok: false, error: String((err && err.message) || err) };
+    }
+  } else {
+    out = { ok: true, message: 'upload service is running' };
+  }
+  return reply(out, prm.callback);
 }
 
 function doPost(e) {
   try {
     const p = JSON.parse(e.postData.contents);
     if (!/^image\//.test(p.mimeType || '')) throw new Error('รองรับเฉพาะไฟล์รูปภาพ');
+    if (!p.key) throw new Error('ไม่ได้ระบุข้อที่อัปโหลด');
     const bytes = Utilities.base64Decode(p.data);
     if (bytes.length > MAX_BYTES) throw new Error('ไฟล์ใหญ่เกินไป');
 
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sh = ss.getSheets().find(s => String(s.getSheetId()) === String(p.gid));
-    if (!sh) throw new Error('ไม่พบชีทที่ต้องการ');
-
-    const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
-    let value, row, url;
+    const name = [p.sheetName, p.no, p.filename || 'image'].filter(String).join('_');
+    const file = getFolder().createFile(Utilities.newBlob(bytes, p.mimeType, name));
+    file.setDescription(KEY_PREFIX + p.key);
+    const warnings = [];
     try {
-      // หาแถวให้เจอก่อน แล้วจึงสร้างไฟล์ เพื่อไม่ให้มีไฟล์ค้างใน Drive เมื่อหาแถวไม่เจอ
-      row = findRow(sh, p);
-      const file = getFolder().createFile(Utilities.newBlob(bytes, p.mimeType, p.filename || 'image'));
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      url = 'https://drive.google.com/file/d/' + file.getId() + '/view';
-      const cell = sh.getRange(row, p.col);
-      const old = String(cell.getDisplayValue() || '').trim();
-      value = old && old !== '-' ? old + '\n' + url : url;
-      cell.setValue(value);
-    } finally {
-      lock.releaseLock();
+    } catch (err) {
+      warnings.push('ตั้งค่าแชร์ลิงก์ไม่ได้: ' + err.message);
     }
-    return json({ ok: true, url, value, row });
+    const url = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+
+    // เขียนลิงก์ลงชีทด้วย (ถ้าไม่สำเร็จ รูปยังแสดงได้จากรายการใน Drive)
+    let value = null, row = null;
+    try {
+      const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+        .find(s => String(s.getSheetId()) === String(p.gid));
+      if (!sh) throw new Error('ไม่พบชีท');
+      const lock = LockService.getScriptLock();
+      lock.waitLock(30000);
+      try {
+        row = findRow(sh, p);
+        const cell = sh.getRange(row, p.col);
+        const old = String(cell.getDisplayValue() || '').trim();
+        value = old && old !== '-' ? old + '\n' + url : url;
+        cell.setValue(value);
+      } finally {
+        lock.releaseLock();
+      }
+    } catch (err) {
+      warnings.push('เขียนลิงก์ลงชีทไม่ได้: ' + err.message);
+    }
+    return reply({ ok: true, id: file.getId(), url, value, row, warnings });
   } catch (err) {
-    return json({ ok: false, error: String((err && err.message) || err) });
+    return reply({ ok: false, error: String((err && err.message) || err) });
   }
 }
 
@@ -68,7 +104,7 @@ function findRow(sh, p) {
   for (let i = 0; i < all.length; i++) {
     if (match.every(m => same(all[i][m.col - 1], m))) return i + 1;
   }
-  throw new Error('ไม่พบแถวนี้ในชีท (ข้อมูลอาจถูกแก้ไข) กรุณากดโหลดข้อมูลใหม่แล้วลองอีกครั้ง');
+  throw new Error('ไม่พบแถวนี้ในชีท');
 }
 
 function getFolder() {
@@ -76,6 +112,10 @@ function getFolder() {
   catch (e) { throw new Error('เปิดโฟลเดอร์เก็บรูปใน Google Drive ไม่ได้ (บัญชีที่ Deploy ต้องมีสิทธิ์แก้ไขโฟลเดอร์นี้)'); }
 }
 
-function json(o) {
-  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+function reply(o, callback) {
+  const body = JSON.stringify(o);
+  if (callback && /^[\w.]+$/.test(callback)) {
+    return ContentService.createTextOutput(callback + '(' + body + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
 }
