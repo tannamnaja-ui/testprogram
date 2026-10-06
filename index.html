@@ -167,7 +167,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261006.235959';
+const APP_VERSION = '20261007.002254';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbyQ6OsF8SjeISWk_PwsgSMdl-NRkXq1RuC-n4cMs4cw3P5dqBIMo8kbBkx-jaWJ8q1y/exec';
@@ -540,12 +540,12 @@ async function loadDriveList(){
   driveFiles = map;
 }
 function imageCell(gid, idx){
-  const {urls, note} = rowMedia(gid, idx);
+  // แสดงเฉพาะปุ่ม ไม่แสดงข้อความเดิมในช่อง (ลิงก์ในช่องยังเปิดได้จากปุ่มดูรูป)
+  const {urls} = rowMedia(gid, idx);
   const key = `${gid}:${idx}`;
   return `<td class="w-img"><div class="imgcell">
     ${urls.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${urls.length})</button>` : ''}
-    <button class="btn-sm" data-up="${key}">อัปโหลด</button>
-    ${note ? `<div class="note">${esc(note)}</div>` : ''}</div></td>`;
+    <button class="btn-sm" data-up="${key}">อัปโหลด</button></div></td>`;
 }
 
 let viewer = {list:[], i:0};
