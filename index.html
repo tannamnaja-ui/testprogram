@@ -109,6 +109,7 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 #viewer .stage img{max-width:100%;max-height:calc(100vh - 120px);object-fit:contain}
 #viewer .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:8px;font-size:14px}
 #viewer .close{position:absolute;top:6px;right:6px;z-index:1}
+#viewer .del-btn{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
 .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:13px;white-space:nowrap;background:var(--wait-bg);color:var(--wait)}
 .badge.ok{background:var(--ok-bg);color:var(--ok)}
 .badge.bad{background:var(--bad-bg);color:var(--bad)}
@@ -168,13 +169,13 @@ a{color:var(--accent)}
   <div class="box">
     <button class="close" title="ปิด">✕</button>
     <div class="stage"></div>
-    <div class="bar"><button class="nav-btn" data-step="-1">‹ ก่อนหน้า</button><span class="cap"></span><button class="nav-btn" data-step="1">ถัดไป ›</button></div>
+    <div class="bar"><button class="nav-btn" data-step="-1">‹ ก่อนหน้า</button><span class="cap"></span><button class="del-btn" id="delImg" hidden>🗑 ลบรูป</button><button class="nav-btn" data-step="1">ถัดไป ›</button></div>
   </div>
 </div>
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.002833';
+const APP_VERSION = '20261007.003121';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbyQ6OsF8SjeISWk_PwsgSMdl-NRkXq1RuC-n4cMs4cw3P5dqBIMo8kbBkx-jaWJ8q1y/exec';
@@ -557,8 +558,8 @@ function imageCell(gid, idx){
     <button class="btn-sm" data-up="${key}">อัปโหลด</button></div></td>`;
 }
 
-let viewer = {list:[], i:0};
-function openViewer(urls){ viewer = {list:urls, i:0}; showViewer(); }
+let viewer = {list:[], i:0, gid:null, idx:null};
+function openViewer(urls, gid, idx){ viewer = {list:urls, i:0, gid, idx}; showViewer(); }
 function showViewer(){
   const box = document.getElementById('viewer');
   const u = viewer.list[viewer.i], id = driveId(u);
@@ -568,8 +569,33 @@ function showViewer(){
     ? `<img src="${esc(src)}" alt="ภาพประกอบ" onerror="if(!this.dataset.f&&'${id||''}'){this.dataset.f=1;this.src='https://lh3.googleusercontent.com/d/${id||''}'}">`
     : `<div class="empty">ไฟล์นี้แสดงตัวอย่างไม่ได้ (อาจเป็นวิดีโอหรือเว็บเพจ)<br><a href="${esc(u)}" target="_blank" rel="noopener">เปิดลิงก์</a></div>`;
   box.querySelector('.cap').innerHTML = `${viewer.i+1} / ${viewer.list.length} · <a href="${esc(u)}" target="_blank" rel="noopener">เปิดในแท็บใหม่</a>`;
+  // ลบได้เฉพาะรูปที่อัปโหลดผ่านระบบ (อยู่ในรายการรูปของ Drive)
+  const own = viewer.gid!=null && id && (driveFiles[rowKey(viewer.gid, viewer.idx)]||[]).some(f=>f.id===id);
+  box.querySelector('#delImg').hidden = !own;
   box.querySelectorAll('.nav-btn').forEach(b=>b.style.visibility = viewer.list.length>1 ? 'visible' : 'hidden');
   box.hidden = false;
+}
+async function deleteCurrentImage(){
+  const u = viewer.list[viewer.i], id = driveId(u), {gid, idx} = viewer;
+  if(!id || !confirm('ลบรูปนี้ออกจาก Google Drive ใช่หรือไม่?\n(รูปจะถูกย้ายไปถังขยะของ Drive และลิงก์ในชีทจะถูกลบออก)')) return;
+  const t = data[gid], btn = document.getElementById('delImg');
+  const match = [t.f.title, t.f.no].filter(i=>i>=0 && norm(t.rows[idx][i]))
+    .map(i=>({col:sheetCol(t, idx, i), value:norm(t.rows[idx][i])}));
+  const p = JSON.stringify({gid, row:t.meta[idx].sheetRow, col:sheetCol(t, idx, t.f.image), match});
+  btn.disabled = true; btn.textContent = 'กำลังลบ…';
+  try{
+    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'delete', id, p}));
+    if(!out.ok) throw new Error(out.error || 'สคริปต์ยังไม่รองรับการลบ กรุณาอัปเดต Apps Script');
+    // เอารูปออกจากหน้าเว็บทันที
+    const key = rowKey(gid, idx);
+    driveFiles[key] = (driveFiles[key]||[]).filter(f=>f.id!==id);
+    t.rows[idx][t.f.image] = norm(t.rows[idx][t.f.image]).split('\n').filter(l=>l.indexOf(id)<0).join('\n');
+    viewer.list.splice(viewer.i, 1);
+    if(!viewer.list.length) document.getElementById('viewer').hidden = true;
+    else { viewer.i = Math.min(viewer.i, viewer.list.length-1); showViewer(); }
+    softRender();
+  }catch(e){ alert('ลบรูปไม่สำเร็จ: ' + e.message); }
+  btn.disabled = false; btn.textContent = '🗑 ลบรูป';
 }
 function stepViewer(d){ viewer.i = (viewer.i + d + viewer.list.length) % viewer.list.length; showViewer(); }
 
@@ -739,7 +765,7 @@ document.getElementById('main').addEventListener('input', e=>{
 });
 document.getElementById('main').addEventListener('click', e=>{
   const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
-  if(v){ const [gid, idx] = v.dataset.view.split(':'); openViewer(rowMedia(gid, +idx).urls); return; }
+  if(v){ const [gid, idx] = v.dataset.view.split(':'); openViewer(rowMedia(gid, +idx).urls, gid, +idx); return; }
   if(u){
     if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่าระบบอัปโหลด\nกรุณาติดตั้ง Apps Script ตามขั้นตอนในไฟล์ apps-script/Code.gs แล้วใส่ URL ในค่า UPLOAD_URL ของ index.html'); return; }
     uploadTarget = u.dataset.up; const inp = document.getElementById('fileInput'); inp.value = ''; inp.click(); return;
@@ -757,7 +783,8 @@ document.getElementById('fileInput').addEventListener('change', e=>{
   const files = [...e.target.files]; if(files.length && uploadTarget) uploadFiles(files);
 });
 document.getElementById('viewer').addEventListener('click', e=>{
-  if(e.target.dataset.step) stepViewer(+e.target.dataset.step);
+  if(e.target.id==='delImg') deleteCurrentImage();
+  else if(e.target.dataset.step) stepViewer(+e.target.dataset.step);
   else if(e.target.classList.contains('close') || e.target.id==='viewer') document.getElementById('viewer').hidden = true;
 });
 document.addEventListener('keydown', e=>{

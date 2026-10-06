@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเก
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'ping' || prm.action === 'leave') {
+  if (prm.action === 'delete') {
+    try { out = deleteImage(prm); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'ping' || prm.action === 'leave') {
     try { out = presence(prm); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'list') {
@@ -53,6 +56,43 @@ function doGet(e) {
     out = { ok: true, message: 'upload service is running' };
   }
   return reply(out, prm.callback);
+}
+
+// ---------- ลบรูป ----------
+// ลบได้เฉพาะรูปที่อัปโหลดผ่านระบบนี้ (อยู่ในโฟลเดอร์ที่กำหนดและมีคำอธิบาย row:) → ย้ายไปถังขยะของ Drive
+function deleteImage(prm) {
+  const id = String(prm.id || '');
+  if (!/^[\w-]{20,}$/.test(id)) throw new Error('รหัสไฟล์ไม่ถูกต้อง');
+  const file = DriveApp.getFileById(id);
+  if ((file.getDescription() || '').indexOf(KEY_PREFIX) !== 0) throw new Error('ลบได้เฉพาะรูปที่อัปโหลดผ่านระบบนี้');
+  let inFolder = false;
+  const parents = file.getParents();
+  while (parents.hasNext()) if (parents.next().getId() === FOLDER_ID) inFolder = true;
+  if (!inFolder) throw new Error('ลบได้เฉพาะรูปในโฟลเดอร์เก็บรูปของระบบ');
+  file.setTrashed(true);
+
+  // เอาลิงก์ของรูปนี้ออกจากช่องภาพในชีท (ถ้ามี)
+  let sheetUpdated = false;
+  try {
+    const p = JSON.parse(prm.p || '{}');
+    const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+      .find(s => String(s.getSheetId()) === String(p.gid));
+    if (sh && p.col) {
+      const lock = LockService.getScriptLock();
+      lock.waitLock(30000);
+      try {
+        const cell = sh.getRange(findRow(sh, p), p.col);
+        const old = String(cell.getDisplayValue() || '');
+        if (old.indexOf(id) >= 0) {
+          cell.setValue(old.split('\n').filter(l => l.indexOf(id) < 0).join('\n').trim());
+          sheetUpdated = true;
+        }
+      } finally {
+        lock.releaseLock();
+      }
+    }
+  } catch (err) { /* ลบไฟล์แล้ว ส่วนชีทไม่สำคัญ */ }
+  return { ok: true, sheetUpdated };
 }
 
 // ---------- ผู้ที่กำลังดู ----------
