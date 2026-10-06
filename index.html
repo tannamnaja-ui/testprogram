@@ -167,7 +167,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.002254';
+const APP_VERSION = '20261007.002439';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbyQ6OsF8SjeISWk_PwsgSMdl-NRkXq1RuC-n4cMs4cw3P5dqBIMo8kbBkx-jaWJ8q1y/exec';
@@ -199,6 +199,8 @@ const SHORT_COLS = /^ลำดับ$|^วันที่$/;
 
 const data = {};          // gid -> {headers, rows, f:{group,type,result,tester}} หรือ {error}
 const filters = {};       // tab name -> {group,type,result,tester,q,src}
+// คืนค่าตัวกรองหลังโหลดหน้าใหม่เพื่ออัปเดตเวอร์ชัน
+try{ Object.assign(filters, JSON.parse(sessionStorage.getItem('filters')||'{}')); sessionStorage.removeItem('filters'); }catch(e){}
 let loadedAt = null;
 
 document.getElementById('sheetLink').href = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=750027123#gid=750027123`;
@@ -769,11 +771,14 @@ async function checkVersion(){
     let tried = ''; try{ tried = sessionStorage.getItem('reloadedFor'); }catch(e){}
     if(tried===latest) return; // กันโหลดวนซ้ำ
     try{ sessionStorage.setItem('reloadedFor', latest); }catch(e){}
+    try{ sessionStorage.setItem('filters', JSON.stringify(filters)); }catch(e){}
     location.replace(location.pathname + '?v=' + latest + location.hash);
   }catch(e){}
 }
 document.getElementById('ver').textContent = 'v' + APP_VERSION;
 checkVersion();
+// ระหว่างเปิดหน้าค้างไว้ ตรวจเวอร์ชันใหม่ทุก 2 นาที (ไม่โหลดใหม่ระหว่างใช้งานตัวกรอง/ดูรูป/อัปโหลด)
+setInterval(()=>{ if(canAutoRefresh()) checkVersion(); }, 120*1000);
 render();
 loadAll();
 ping();
