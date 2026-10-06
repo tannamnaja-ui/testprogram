@@ -33,15 +33,15 @@ function doPost(e) {
     const sh = ss.getSheets().find(s => String(s.getSheetId()) === String(p.gid));
     if (!sh) throw new Error('ไม่พบชีทที่ต้องการ');
 
-    const file = getFolder().createFile(Utilities.newBlob(bytes, p.mimeType, p.filename || 'image'));
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const url = 'https://drive.google.com/file/d/' + file.getId() + '/view';
-
     const lock = LockService.getScriptLock();
-    lock.waitLock(20000);
-    let value, row;
+    lock.waitLock(30000);
+    let value, row, url;
     try {
+      // หาแถวให้เจอก่อน แล้วจึงสร้างไฟล์ เพื่อไม่ให้มีไฟล์ค้างใน Drive เมื่อหาแถวไม่เจอ
       row = findRow(sh, p);
+      const file = getFolder().createFile(Utilities.newBlob(bytes, p.mimeType, p.filename || 'image'));
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      url = 'https://drive.google.com/file/d/' + file.getId() + '/view';
       const cell = sh.getRange(row, p.col);
       const old = String(cell.getDisplayValue() || '').trim();
       value = old && old !== '-' ? old + '\n' + url : url;

@@ -502,6 +502,20 @@ function prepareImage(file){
   });
 }
 
+// โหลดชีทใหม่แล้วดูว่าช่องภาพของแถวนี้มีลิงก์เพิ่มขึ้นหรือไม่
+async function checkUploaded(gid, idx, before){
+  const t = data[gid], title = norm(t.rows[idx][t.f.title]);
+  try{
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&_=${Date.now()}`);
+    const fresh = buildTable(parseCSV(await res.text()));
+    const j = fresh.rows.findIndex(r=>norm(r[t.f.title])===title);
+    if(j<0) return null;
+    const value = fresh.rows[j][t.f.image];
+    if(mediaOf(value).urls.length <= before) return null;
+    return {ok:true, value, row:fresh.meta[j].sheetRow};
+  }catch(e){ return null; }
+}
+
 let uploadTarget = null;
 async function uploadFiles(files){
   const [gid, idxStr] = uploadTarget.split(':'); const idx = +idxStr;
@@ -514,9 +528,19 @@ async function uploadFiles(files){
     for(const f of files){
       if(btn) btn.textContent = `กำลังส่ง ${done+1}/${files.length}…`;
       const img = await prepareImage(f);
-      const res = await fetch(UPLOAD_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({...img, gid, row:t.meta[idx].sheetRow, col:sheetCol(t, idx, col), match})});
-      const out = await res.json();
+      const before = mediaOf(t.rows[idx][col]).urls.length;
+      let out;
+      try{
+        const res = await fetch(UPLOAD_URL, {method:'POST', credentials:'omit', redirect:'follow',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body: JSON.stringify({...img, gid, row:t.meta[idx].sheetRow, col:sheetCol(t, idx, col), match})});
+        out = await res.json();
+      }catch(netErr){
+        // เบราว์เซอร์อ่านคำตอบไม่ได้ แต่ Google อาจบันทึกสำเร็จแล้ว: ตรวจจากชีทโดยตรง
+        if(btn) btn.textContent = 'กำลังตรวจสอบ…';
+        out = await checkUploaded(gid, idx, before);
+        if(!out) throw new Error(netErr.message + '\n(ตรวจในชีทแล้วยังไม่พบลิงก์รูป)');
+      }
       if(!out.ok) throw new Error(out.error);
       t.rows[idx][col] = out.value;
       t.meta[idx].sheetRow = out.row;
