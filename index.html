@@ -97,6 +97,7 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 .tablewrap{border-color:var(--grid)}
 .card{border-color:var(--grid)}
 .data td.w-mod{min-width:238px}
+.data td.w-note{min-width:280px}
 .data tbody tr:nth-child(even) td,.sum tbody tr:nth-child(even):not(.total) td{background:var(--stripe)}
 .data tr:hover td,.sum tbody tr:not(.total):hover td{background:var(--accent-soft)}
 th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
@@ -178,7 +179,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.005131';
+const APP_VERSION = '20261007.005433';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -420,7 +421,7 @@ function renderSheet(tab){
   const fl = getFilter(tab.name);
   const all = toItems(tab.gid);
   const shown = applyFilters(all, fl);
-  const cls = h => h==='สิ่งที่แก้ไข' ? 'w-xl' : h==='โมดูล/หน้าจอ' ? 'w-mod' : SHORT_COLS.test(h) ? 'w-s' : LONG_COLS.test(h) ? 'w-l' : 'w-m';
+  const cls = h => h==='สิ่งที่แก้ไข' ? 'w-xl' : h==='โมดูล/หน้าจอ' ? 'w-mod' : h==='หมายเหตุ' ? 'w-note' : SHORT_COLS.test(h) ? 'w-s' : LONG_COLS.test(h) ? 'w-l' : 'w-m';
   const resCol = t.f.result;
   // ลำดับคอลัมน์ที่แสดง: ย้ายผลการทดสอบมาต่อจากประเภท
   // ไม่แสดงคอลัมน์ที่ไม่มีชื่อหัวในชีท (เช่น คอลัมน์ H ของ New Feture)
