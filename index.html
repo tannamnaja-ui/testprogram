@@ -85,6 +85,9 @@ th{background:var(--head);position:sticky;top:0;z-index:1;font-weight:600;white-
 .data td.w-m{min-width:140px}
 .data td.w-l{min-width:280px}
 .data td.w-xl{min-width:630px}
+/* คอลัมน์ผลการทดสอบ: กว้างเท่าหัวคอลัมน์ ข้อความยาวขึ้นบรรทัดใหม่ */
+th.th-res,.data td.w-res{width:92px;min-width:92px;max-width:92px}
+.data td.w-res .badge{white-space:normal;word-break:break-word}
 /* เส้นกรอบทุกช่อง (separate เพื่อให้เส้นอยู่กับหัวตารางที่ค้างไว้ตอนเลื่อน) */
 table.data,table.sum{border-collapse:separate;border-spacing:0}
 .data th,.data td,.card .sum th,.card .sum td{border-right:1px solid var(--grid);border-bottom:1px solid var(--grid)}
@@ -175,7 +178,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.003612';
+const APP_VERSION = '20261007.005131';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -426,11 +429,11 @@ function renderSheet(tab){
   if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
-      if(i===resCol && norm(c)) return `<td class="w-m"><span class="badge ${resultClass(c)}">${esc(norm(c))}</span></td>`;
+      if(i===resCol) return `<td class="w-res">${norm(c) ? `<span class="badge ${resultClass(c)}">${esc(norm(c))}</span>` : ''}</td>`;
       return `<td class="${cls(t.headers[i])}">${linkify(norm(c))}</td>`;
     }).join('')}</tr>`).join('');
   return filterBar(tab.name, all, fl) +
-    `<div class="tablewrap"><table class="data"><thead><tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
+    `<div class="tablewrap"><table class="data"><thead><tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
      <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
