@@ -134,6 +134,7 @@ a{color:var(--accent)}
 <body>
 <header>
   <h1>สรุปการทดสอบโปรแกรม HOSxP XE</h1>
+  <span class="meta" id="ver"></span>
   <span class="meta" id="status">กำลังโหลดข้อมูล…</span>
   <span class="spacer"></span>
   <a id="sheetLink" class="edit-link" target="_blank" rel="noopener">เปิด Google Sheet เพื่อแก้ไข</a>
@@ -151,6 +152,8 @@ a{color:var(--accent)}
 </div>
 
 <script>
+// เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
+const APP_VERSION = '20261006.233350';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbz19D0rVxx7sNjEj-6g5S8Zj4tCHzZKoFDaUWjYNq2HaGv0ahxVvP7hk3xBuuQw15gg/exec';
@@ -616,6 +619,21 @@ document.addEventListener('keydown', e=>{
 });
 window.addEventListener('hashchange', render);
 document.getElementById('reload').addEventListener('click', loadAll);
+// ถ้าเบราว์เซอร์แสดงเวอร์ชันเก่าที่จำไว้ ให้โหลดเวอร์ชันล่าสุดใหม่อัตโนมัติ
+async function checkVersion(){
+  if(location.protocol==='file:') return;
+  try{
+    const res = await fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'});
+    const latest = ((await res.text()).match(/const APP_VERSION = '([^']*)'/)||[])[1];
+    if(!latest || latest===APP_VERSION) return;
+    let tried = ''; try{ tried = sessionStorage.getItem('reloadedFor'); }catch(e){}
+    if(tried===latest) return; // กันโหลดวนซ้ำ
+    try{ sessionStorage.setItem('reloadedFor', latest); }catch(e){}
+    location.replace(location.pathname + '?v=' + latest + location.hash);
+  }catch(e){}
+}
+document.getElementById('ver').textContent = 'v' + APP_VERSION;
+checkVersion();
 render();
 loadAll();
 </script>

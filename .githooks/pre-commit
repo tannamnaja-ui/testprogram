@@ -1,0 +1,5 @@
+#!/bin/sh
+# ใส่เลขเวอร์ชัน (วันเวลาที่ commit) ลงใน index.html เพื่อให้หน้าเว็บรู้ว่ามีเวอร์ชันใหม่
+v=$(date +%Y%m%d.%H%M%S)
+sed -i "s/^const APP_VERSION = '[^']*';/const APP_VERSION = '$v';/" index.html
+git add index.html
