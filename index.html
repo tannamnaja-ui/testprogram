@@ -175,10 +175,10 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.003121';
+const APP_VERSION = '20261007.003612';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
-const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbyQ6OsF8SjeISWk_PwsgSMdl-NRkXq1RuC-n4cMs4cw3P5dqBIMo8kbBkx-jaWJ8q1y/exec';
+const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
@@ -664,7 +664,7 @@ if(!sid){
 let credential = null, me = null, meKey = undefined;
 async function ping(extra={}){
   if(!UPLOAD_URL || location.protocol==='file:') return;
-  const q = new URLSearchParams({action:'ping', sid, ...extra});
+  const q = new URLSearchParams({action:'ping', vid:sid, ...extra});
   const sentToken = !!(credential && !me && !extra.signout);
   if(sentToken) q.set('token', credential); // ส่ง token เฉพาะครั้งแรก เซิร์ฟเวอร์จำไว้ต่อ
   try{
@@ -722,7 +722,7 @@ function initGoogleSignin(){
 setInterval(()=>{ if(!document.hidden) ping(); }, PING_SEC*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) ping(); });
 window.addEventListener('pagehide', ()=>{
-  if(UPLOAD_URL && navigator.sendBeacon) navigator.sendBeacon(UPLOAD_URL + '?action=leave&sid=' + sid);
+  if(UPLOAD_URL && navigator.sendBeacon) navigator.sendBeacon(UPLOAD_URL + '?action=leave&vid=' + sid);
 });
 document.addEventListener('click', e=>{
   const box = document.getElementById('presence');

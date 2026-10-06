@@ -26,7 +26,7 @@ const GOOGLE_CLIENT_ID = '';
 const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเกินเวลานี้ = ออกไปแล้ว
 
 // GET ?action=list → รายการรูปทั้งหมดพร้อมข้อที่อัปโหลด
-// GET ?action=ping&sid=... → แจ้งว่ายังเปิดดูอยู่ และรับรายชื่อผู้ที่กำลังดู
+// GET ?action=ping&vid=... → แจ้งว่ายังเปิดดูอยู่ และรับรายชื่อผู้ที่กำลังดู
 // (ทุก action รองรับ ?callback= แบบ JSONP)
 function doGet(e) {
   const prm = (e && e.parameter) || {};
@@ -97,8 +97,9 @@ function deleteImage(prm) {
 
 // ---------- ผู้ที่กำลังดู ----------
 function presence(prm) {
-  const sid = String(prm.sid || '');
-  if (!/^[\w-]{8,64}$/.test(sid)) throw new Error('sid ไม่ถูกต้อง');
+  // ใช้ชื่อ vid เพราะ c และ sid เป็นพารามิเตอร์ที่ Apps Script สงวนไว้
+  const sid = String(prm.vid || '');
+  if (!/^[\w-]{8,64}$/.test(sid)) throw new Error('vid ไม่ถูกต้อง');
   // ตรวจ token นอก lock เพราะต้องเรียกไปที่ Google
   const profile = prm.token ? verifyIdToken(prm.token) : null;
   const cache = CacheService.getScriptCache();
@@ -141,7 +142,7 @@ function verifyIdToken(token) {
 }
 
 function doPost(e) {
-  // navigator.sendBeacon ตอนปิดหน้า: ?action=leave&sid=...
+  // navigator.sendBeacon ตอนปิดหน้า: ?action=leave&vid=...
   if (e && e.parameter && e.parameter.action === 'leave') {
     try { presence(e.parameter); } catch (err) { /* ไม่ต้องทำอะไร */ }
     return reply({ ok: true });
