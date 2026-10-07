@@ -202,7 +202,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.144347';
+const APP_VERSION = '20261007.144423';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -359,10 +359,14 @@ async function loadAll(silent=false){
 function showLatest(){
   const t = data['653470496'], el = document.getElementById('latest');
   if(!t || t.error || t.f.date<0){ el.hidden = true; return; }
-  let best = '', label = '';
-  for(const r of t.rows){ const d = isoDate(r[t.f.date]); if(d > best){ best = d; label = norm(r[t.f.date]); } }
+  let best = '';
+  for(const r of t.rows){ const d = isoDate(r[t.f.date]); if(d > best) best = d; }
   el.hidden = !best;
-  el.textContent = `ข้อมูลจาก what's new ล่าสุด วันที่ ${label}`;
+  if(!best) return;
+  // แสดงแบบไทย เช่น 6 ต.ค. 2569
+  const [y, m, d] = best.split('-').map(Number);
+  const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  el.textContent = `ข้อมูลจาก what's new ล่าสุด วันที่ ${d} ${TH_MONTHS[m-1]} ${y + 543}`;
 }
 
 // อัปเดตข้อมูลจาก Google Sheet อัตโนมัติ
