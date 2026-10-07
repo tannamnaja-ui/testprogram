@@ -202,7 +202,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.144423';
+const APP_VERSION = '20261007.144813';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -349,7 +349,7 @@ async function loadAll(silent=false){
     loadDriveList().then(()=>silent ? softRender() : render()).catch(e=>console.warn('รายการรูป:', e.message));
   }
   const errs = TABS.filter(t=>data[t.gid]?.error);
-  st.textContent = 'อัปเดตล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
+  st.textContent = 'อัปเดต google sheet ล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
   st.className = errs.length ? 'meta err' : 'meta';
   if(changed) silent ? softRender() : render();
   showLatest();
