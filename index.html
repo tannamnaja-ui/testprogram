@@ -75,7 +75,7 @@ main{padding:16px}
 .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 .filters label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:2px}
 .filters select,.filters input{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);min-width:150px;max-width:240px}
-.filters .count{margin-left:auto;color:var(--muted);font-size:13px;align-self:center}
+.count{color:var(--muted);font-size:13px;font-weight:600;margin:0 0 6px 2px;flex-shrink:0}
 .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 230px)}
 table{border-collapse:collapse;width:100%}
 th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
@@ -185,7 +185,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.105213';
+const APP_VERSION = '20261007.105350';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -411,13 +411,13 @@ function filterBar(name, items, fl, extra=''){
     return `<label>${FILTER_LABELS[key]}<select data-k="${key}"><option value="">ทั้งหมด</option>${
       vals.map(v=>`<option value="${esc(v)}"${v===fl[key]?' selected':''}>${esc(v)} (${counts.get(v)||0})</option>`).join('')}</select></label>`;
   };
-  return `<div class="filters" data-tab="${esc(name)}">${extra}
+  return `<div class="count" id="count"></div>
+    <div class="filters" data-tab="${esc(name)}">${extra}
     ${opt('group',GROUP_ORDER)}${opt('type',TYPE_ORDER)}${opt('result')}${opt('tester')}
     ${items.some(i=>i.date) ? `<label>ตั้งแต่วันที่<input data-k="from" type="date" value="${fl.from}"></label>
     <label>ถึงวันที่<input data-k="to" type="date" value="${fl.to}"></label>` : ''}
     <label>ค้นหา<input data-k="q" type="search" value="${esc(fl.q)}" placeholder="คำค้น…"></label>
-    <button data-clear>ล้างตัวกรอง</button>
-    <span class="count" id="count"></span></div>`;
+    <button data-clear>ล้างตัวกรอง</button></div>`;
 }
 
 // ---------- views ----------
