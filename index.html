@@ -203,7 +203,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.152748';
+const APP_VERSION = '20261007.160145';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -534,7 +534,10 @@ function renderSummary(tab){
   }<option value="all"${fl.src==='all'?' selected':''}>ทุกชีทรวมกัน</option></select></label>`;
 
   const types = sortVals([...new Set(items.map(i=>i.type))], TYPE_ORDER);
-  const testers = sortVals([...new Set(items.map(i=>i.tester))]);
+  // ผู้ทดสอบเรียงตามจำนวนรวมมากไปน้อย ((ไม่ระบุ) ไว้ท้ายสุด)
+  const testerCount = countBy(items, 'tester');
+  const testers = [...testerCount.keys()].sort((a,b)=>
+    (a===BLANK) - (b===BLANK) || testerCount.get(b) - testerCount.get(a) || a.localeCompare(b,'th'));
   const n = (arr, pred) => arr.filter(pred).length;
   const cell = (v, c='') => `<td class="${c}${v?'':' z'}">${v}</td>`;
   const resHead = RESULT_BUCKETS.map(b=>`<th class="${b.cls}">${b.name}</th>`).join('');
