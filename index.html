@@ -82,6 +82,8 @@ main{padding:16px}
 .filters .qrow{display:flex;gap:4px}
 .filters .qrow input{min-width:120px}
 .filters .qrow button{padding:4px 10px;white-space:nowrap}
+.filters .imgchk{flex-direction:row;align-items:center;gap:4px;font-size:14px;color:var(--text);white-space:nowrap;cursor:pointer;padding:0 4px}
+.filters .imgchk input{min-width:0;width:auto}
 .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 230px)}
 table{border-collapse:collapse;width:100%}
 th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
@@ -197,7 +199,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.120610';
+const APP_VERSION = '20261007.120946';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -396,7 +398,9 @@ function countBy(items, key){ const m=new Map(); for(const it of items){ m.set(i
 
 // dd/mm/yyyy → yyyy-mm-dd (ใช้เทียบช่วงวันที่)
 function isoDate(s){ const m = norm(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : ''; }
-function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',src:'653470496'}; }
+// ข้อนี้มีรูป (ลิงก์ในชีท หรือรูปที่อัปโหลดผ่านระบบ) ให้กดดูได้หรือไม่
+function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.idx).urls.length>0; }
+function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'653470496'}; }
 
 function applyFilters(items, fl){
   const q = fl.q.trim().toLowerCase();
@@ -404,6 +408,7 @@ function applyFilters(items, fl){
     (!fl.group || it.group===fl.group) && (!fl.type || it.type===fl.type) &&
     (!fl.result || it.result===fl.result) && (!fl.tester || it.tester===fl.tester) &&
     (!fl.from || (it.date && it.date>=fl.from)) && (!fl.to || (it.date && it.date<=fl.to)) &&
+    (!fl.img || hasImage(it)) &&
     (!q || it.text.includes(q)));
 }
 
@@ -429,7 +434,9 @@ function filterBar(name, items, fl, extra='', countExtra=''){
     ${opt('group',GROUP_ORDER)}${opt('type',TYPE_ORDER)}${opt('result')}${opt('tester')}
     ${items.some(i=>i.date) ? `<label>ตั้งแต่วันที่<input data-k="from" type="date" value="${fl.from}"></label>
     <label>ถึงวันที่<input data-k="to" type="date" value="${fl.to}"></label>` : ''}
-    <div class="fld">ค้นหา<span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="คำค้น…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div></div>`;
+    <div class="fld">ค้นหา<span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="คำค้น…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button>${
+      items.length && data[items[0].gid]?.f.image>=0 ? `<label class="imgchk"><input type="checkbox" data-k="img"${fl.img?' checked':''}>มีรูป</label>` : ''
+    }</span></div></div>`;
 }
 
 // ---------- views ----------
@@ -800,7 +807,7 @@ document.getElementById('main').addEventListener('change', e=>{
     softRender(); return;
   }
   const k = e.target.dataset.k; if(!k || k==='q') return;
-  const fl = getFilter(currentTab().name); fl[k] = e.target.value;
+  const fl = getFilter(currentTab().name); fl[k] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(k==='src'){ fl.group=fl.type=fl.result=fl.tester=''; }
   render();
 });
@@ -827,7 +834,7 @@ document.getElementById('main').addEventListener('click', e=>{
     render(); return;
   }
   if(!e.target.hasAttribute('data-clear')) return;
-  const fl = getFilter(currentTab().name); Object.assign(fl,{group:'',type:'',result:'',tester:'',from:'',to:'',q:''}); render();
+  const fl = getFilter(currentTab().name); Object.assign(fl,{group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false}); render();
 });
 document.getElementById('fileInput').addEventListener('change', e=>{
   const files = [...e.target.files]; if(files.length && uploadTarget) uploadFiles(files);
