@@ -185,7 +185,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.105350';
+const APP_VERSION = '20261007.112135';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -207,6 +207,7 @@ const FIELD_NAMES = {
   type:['ประเภท'],
   result:['ผลการทดสอบ','สถานะ'],
   tester:['ผู้ตรวจสอบ','ผู้ทดสอบ'],
+  system:['ระบบงาน'],
 };
 const FILTER_LABELS = {group:'กลุ่ม', type:'ประเภท', result:'ผลการทดสอบ', tester:'ผู้ทดสอบ'};
 const GROUP_ORDER = ['คลินิก','เภสัชกรรม','การเงิน','ส่งออก/ส่งเบิก','เชื่อมต่อระบบอื่น','ระบบภายใน'];
@@ -398,7 +399,7 @@ function toItems(gid){
   const t = data[gid]; if(!t) return [];
   return t.rows.map((r,idx)=>({
     row:r, gid, idx,
-    group:val(r,t.f.group), type:val(r,t.f.type), result:val(r,t.f.result), tester:val(r,t.f.tester), date:isoDate(t.f.date>=0 ? r[t.f.date] : ''),
+    group:val(r,t.f.group), type:val(r,t.f.type), result:val(r,t.f.result), tester:val(r,t.f.tester), system:val(r,t.f.system), date:isoDate(t.f.date>=0 ? r[t.f.date] : ''),
     text:r.join(' ').toLowerCase(),
   }));
 }
@@ -480,7 +481,6 @@ function renderSummary(tab){
     sources.map(t=>`<option value="${t.gid}"${fl.src===t.gid?' selected':''}>${esc(t.name)} (${data[t.gid]?.rows.length||0})</option>`).join('')
   }<option value="all"${fl.src==='all'?' selected':''}>ทุกชีทรวมกัน</option></select></label>`;
 
-  const groups = sortVals([...new Set(items.map(i=>i.group))], GROUP_ORDER);
   const types = sortVals([...new Set(items.map(i=>i.type))], TYPE_ORDER);
   const testers = sortVals([...new Set(items.map(i=>i.tester))]);
   const n = (arr, pred) => arr.filter(pred).length;
@@ -489,12 +489,17 @@ function renderSummary(tab){
   const resCells = arr => RESULT_BUCKETS.map(b=>cell(n(arr,i=>i.result===b.name), b.cls)).join('');
   const resTotal = RESULT_BUCKETS.map(b=>`<td class="${b.cls}">${n(items,i=>i.result===b.name)}</td>`).join('');
 
-  // 1) กลุ่ม × ประเภท + ผลการทดสอบ
-  const t1 = `<table class="sum"><thead><tr><th>กลุ่ม</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
-    ${groups.map(g=>{ const gi=items.filter(i=>i.group===g);
+  // ตาราง (กลุ่ม หรือ ระบบงาน) × ประเภท + ผลการทดสอบ
+  const pivot = (field, label, order) => {
+    const vals = sortVals([...new Set(items.map(i=>i[field]))], order);
+    return `<table class="sum"><thead><tr><th>${label}</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
+    ${vals.map(g=>{ const gi=items.filter(i=>i[field]===g);
       return `<tr><td>${esc(g)}</td>${types.map(t=>cell(n(gi,i=>i.type===t))).join('')}<td><b>${gi.length}</b></td>${resCells(gi)}</tr>`; }).join('')}
     <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${resTotal}</tr>
     </tbody></table>`;
+  };
+  const t0 = pivot('system', 'ระบบงาน');
+  const t1 = pivot('group', 'กลุ่ม', GROUP_ORDER);
 
   // 2) ประเภท × ผลการทดสอบ
   const t3 = `<table class="sum"><thead><tr><th>ประเภท</th>${resHead}<th>รวม</th></tr></thead><tbody>
@@ -510,6 +515,7 @@ function renderSummary(tab){
 
   return filterBar(tab.name, all, fl, srcSel) +
     (items.length ? `<div class="cards">
+      ${card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0)}
       ${card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1)}
       ${card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3)}
       ${card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4)}
