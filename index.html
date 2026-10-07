@@ -33,6 +33,8 @@ header .meta{color:var(--muted);font-size:13px}
 header .spacer{flex:1}
 .edit-link{background:#fde3e1;color:#a3261b;padding:5px 12px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;border:1px solid #f5c2bd}
 .edit-link:hover{background:#fbd3cf}
+.latest{background:#d6f2dd;color:#14532d;font-weight:700;font-size:14px;padding:4px 12px;border-radius:6px;border:1px solid #a7dfb6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .latest{background:#1c3a26;color:#a7e8bb;border-color:#2c5a3a}}
 #presence{position:relative;font-size:13px}
 #presence summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
 #presence summary::-webkit-details-marker{display:none}
@@ -178,6 +180,7 @@ a{color:var(--accent)}
 <body>
 <header>
   <h1>สรุปการทดสอบโปรแกรม HOSxP XE</h1>
+  <span id="latest" class="latest" hidden></span>
   <span class="meta" id="ver"></span>
   <span class="meta" id="status">กำลังโหลดข้อมูล…</span>
   <span class="spacer"></span>
@@ -199,7 +202,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.120946';
+const APP_VERSION = '20261007.144347';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -349,6 +352,17 @@ async function loadAll(silent=false){
   st.textContent = 'อัปเดตล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
   st.className = errs.length ? 'meta err' : 'meta';
   if(changed) silent ? softRender() : render();
+  showLatest();
+}
+
+// วันที่ล่าสุดในคอลัมน์วันที่ของแท็บ HOSxP V4 (ข้อมูลจาก what's new)
+function showLatest(){
+  const t = data['653470496'], el = document.getElementById('latest');
+  if(!t || t.error || t.f.date<0){ el.hidden = true; return; }
+  let best = '', label = '';
+  for(const r of t.rows){ const d = isoDate(r[t.f.date]); if(d > best){ best = d; label = norm(r[t.f.date]); } }
+  el.hidden = !best;
+  el.textContent = `ข้อมูลจาก what's new ล่าสุด วันที่ ${label}`;
 }
 
 // อัปเดตข้อมูลจาก Google Sheet อัตโนมัติ
