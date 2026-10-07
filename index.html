@@ -95,6 +95,12 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 .data thead th,.card .sum thead th{border-top:1px solid var(--grid)}
 .data thead th{border-bottom:2px solid var(--grid)}
 .tablewrap{border-color:var(--grid)}
+/* หน้าตารางข้อมูล: ตารางเต็มความสูงจอที่เหลือ แถบเลื่อนแนวนอนจึงอยู่ล่างจอเสมอ */
+body.sheet-view{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+body.sheet-view>header,body.sheet-view>nav{flex-shrink:0}
+body.sheet-view>main{flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:8px}
+body.sheet-view .filters{flex-shrink:0}
+body.sheet-view .tablewrap{flex:1;min-height:120px;max-height:none}
 .card{border-color:var(--grid)}
 .data td.w-mod{min-width:238px}
 .data td.w-note{min-width:560px}
@@ -179,7 +185,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.005603';
+const APP_VERSION = '20261007.105213';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -747,6 +753,7 @@ function render(){
   document.getElementById('main').className = 'm' + TABS.indexOf(tab)%6;
   const main = document.getElementById('main');
   if(!loadedAt){ main.innerHTML = '<div class="empty">กำลังโหลดข้อมูลจาก Google Sheet…</div>'; return; }
+  document.body.classList.toggle('sheet-view', !tab.summary);
   main.innerHTML = tab.summary ? renderSummary(tab) : renderSheet(tab);
   const meta = main.querySelector('script[type=x]');
   if(meta){ const [a,b]=meta.textContent.split('/'); document.getElementById('count').textContent = `แสดง ${a} จาก ${b} รายการ`; }
