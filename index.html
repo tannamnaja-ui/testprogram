@@ -75,7 +75,9 @@ main{padding:16px}
 .filters{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
 .filters label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:2px}
 .filters select,.filters input{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);min-width:130px;max-width:220px}
-.count{color:var(--muted);font-size:13px;font-weight:600;margin:0 0 6px 2px;flex-shrink:0}
+.count{color:var(--muted);font-size:13px;font-weight:600;margin:0 0 6px 2px;flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}
+.picker{display:flex;flex-wrap:wrap;gap:4px 14px;font-weight:400;color:var(--text)}
+.picker label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .filters .fld{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:2px}
 .filters .qrow{display:flex;gap:4px}
 .filters .qrow input{min-width:120px}
@@ -190,7 +192,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.113510';
+const APP_VERSION = '20261007.113910';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -348,7 +350,7 @@ let refreshCount = 0, uploading = false;
 function canAutoRefresh(){
   const a = document.activeElement;
   return !document.hidden && !uploading && document.getElementById('viewer').hidden
-    && !(a && (a.tagName==='SELECT' || a.tagName==='INPUT'));
+    && !(a && (a.tagName==='SELECT' || (a.tagName==='INPUT' && a.type!=='checkbox')));
 }
 // วาดใหม่โดยคงตำแหน่งเลื่อนหน้าจอไว้
 function softRender(){
@@ -409,7 +411,7 @@ function toItems(gid){
   }));
 }
 
-function filterBar(name, items, fl, extra=''){
+function filterBar(name, items, fl, extra='', countExtra=''){
   const opt = (key, order) => {
     const counts = countBy(items, key);
     const vals = sortVals([...counts.keys()], order);
@@ -417,7 +419,7 @@ function filterBar(name, items, fl, extra=''){
     return `<label>${FILTER_LABELS[key]}<select data-k="${key}"><option value="">ทั้งหมด</option>${
       vals.map(v=>`<option value="${esc(v)}"${v===fl[key]?' selected':''}>${esc(v)} (${counts.get(v)||0})</option>`).join('')}</select></label>`;
   };
-  return `<div class="count" id="count"></div>
+  return `<div class="count"><span id="count"></span>${countExtra}</div>
     <div class="filters" data-tab="${esc(name)}">${extra}
     ${opt('group',GROUP_ORDER)}${opt('type',TYPE_ORDER)}${opt('result')}${opt('tester')}
     ${items.some(i=>i.date) ? `<label>ตั้งแต่วันที่<input data-k="from" type="date" value="${fl.from}"></label>
@@ -465,6 +467,19 @@ function resultBucket(v){
 }
 
 // กล่องในหน้าสรุปที่ถูกซ่อน (จำไว้ในเบราว์เซอร์นี้)
+// กล่องที่เลือกให้แสดง (ไม่เลือกเลยหรือเลือกทั้งหมด = แสดงทุกกล่อง)
+const SUMMARY_CARDS = [
+  {id:'system', title:'สรุปตามระบบงานและประเภท'},
+  {id:'group', title:'สรุปตามกลุ่มและประเภท'},
+  {id:'type', title:'ผลการทดสอบแยกตามประเภท'},
+  {id:'tester', title:'สรุปตามผู้ทดสอบ'},
+];
+let pickedCards = [];
+try{ pickedCards = JSON.parse(localStorage.getItem('pickedCards')||'[]'); }catch(e){}
+const cardShown = id => !pickedCards.length || pickedCards.length===SUMMARY_CARDS.length || pickedCards.includes(id);
+function cardPicker(){
+  return `<span class="picker">${SUMMARY_CARDS.map(c=>`<label><input type="checkbox" data-cardpick="${c.id}"${pickedCards.includes(c.id)?' checked':''}>${c.title}</label>`).join('')}</span>`;
+}
 let hiddenCards = {};
 try{ hiddenCards = JSON.parse(localStorage.getItem('hiddenCards')||'{}'); }catch(e){}
 function card(id, cls, title, html){
@@ -517,12 +532,12 @@ function renderSummary(tab){
       return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${resCells(pi)}</tr>`; }).join('')}
     <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${resTotal}</tr></tbody></table>`;
 
-  return filterBar(tab.name, all, fl, srcSel) +
+  return filterBar(tab.name, all, fl, srcSel, cardPicker()) +
     (items.length ? `<div class="cards">
-      ${card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0)}
-      ${card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1)}
-      ${card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3)}
-      ${card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4)}
+      ${cardShown('system') ? card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0) : ''}
+      ${cardShown('group') ? card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1) : ''}
+      ${cardShown('type') ? card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3) : ''}
+      ${cardShown('tester') ? card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4) : ''}
     </div>` : `<div class="empty">ไม่พบรายการ</div>`) +
     `<script type="x">${items.length}/${all.length}<\/script>`;
 }
@@ -770,6 +785,13 @@ function render(){
 }
 
 document.getElementById('main').addEventListener('change', e=>{
+  const pick = e.target.dataset.cardpick;
+  if(pick){
+    pickedCards = pickedCards.filter(x=>x!==pick);
+    if(e.target.checked) pickedCards.push(pick);
+    try{ localStorage.setItem('pickedCards', JSON.stringify(pickedCards)); }catch(err){}
+    softRender(); return;
+  }
   const k = e.target.dataset.k; if(!k || k==='q') return;
   const fl = getFilter(currentTab().name); fl[k] = e.target.value;
   if(k==='src'){ fl.group=fl.type=fl.result=fl.tester=''; }
