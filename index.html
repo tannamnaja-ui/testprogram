@@ -129,7 +129,7 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .badge.bad{background:var(--bad-bg);color:var(--bad)}
 .badge.warn{background:var(--warn-bg);color:var(--warn)}
 .empty{padding:30px;text-align:center;color:var(--muted)}
-.cards{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.cards{display:flex;flex-direction:column;gap:14px;align-items:stretch}
 .card{flex:1 1 auto;max-width:100%;background:var(--tint);border:1px solid var(--tint-strong);border-radius:8px;overflow:hidden}
 .card.full{flex-basis:100%}
 .card h2{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -190,7 +190,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.113046';
+const APP_VERSION = '20261007.113105';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
