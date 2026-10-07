@@ -134,6 +134,9 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .cards{display:flex;flex-direction:column;gap:14px;align-items:stretch}
 .card{flex:1 1 auto;max-width:100%;background:var(--tint);border:1px solid var(--tint-strong);border-radius:8px;overflow:hidden}
 .card.full{flex-basis:100%}
+/* เส้นคั่นระหว่างกล่องสรุป */
+.card-sep{border:0;height:4px;background:#2b2f33;margin:4px 0;border-radius:2px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .card-sep{background:#9aa5b1}}
 .card h2{display:flex;justify-content:center;align-items:center;gap:10px;position:relative;text-align:center}
 .card h2 [data-card]{position:absolute;right:10px;top:50%;transform:translateY(-50%)}
 .card.collapsed{flex:0 1 auto}
@@ -194,7 +197,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.120132';
+const APP_VERSION = '20261007.120610';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -536,10 +539,12 @@ function renderSummary(tab){
 
   return filterBar(tab.name, all, fl, srcSel, cardPicker()) +
     (items.length ? `<div class="cards">
-      ${cardShown('system') ? card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0) : ''}
-      ${cardShown('group') ? card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1) : ''}
-      ${cardShown('type') ? card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3) : ''}
-      ${cardShown('tester') ? card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4) : ''}
+      ${[
+        cardShown('system') && card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0),
+        cardShown('group') && card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1),
+        cardShown('type') && card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3),
+        cardShown('tester') && card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4),
+      ].filter(Boolean).join('<hr class="card-sep">')}
     </div>` : `<div class="empty">ไม่พบรายการ</div>`) +
     `<script type="x">${items.length}/${all.length}<\/script>`;
 }
