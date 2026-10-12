@@ -211,7 +211,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261012.123128';
+const APP_VERSION = '20261012.140601';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -433,7 +433,9 @@ function countBy(items, key){ const m=new Map(); for(const it of items){ m.set(i
 function isoDate(s){ const m = norm(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : ''; }
 // ข้อนี้มีรูป (ลิงก์ในชีท หรือรูปที่อัปโหลดผ่านระบบ) ให้กดดูได้หรือไม่
 function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.idx).urls.length>0; }
-function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'653470496'}; }
+// ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
+const XE_GIDS = ['653470496', '1356310016', '332727688'];
+function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe'}; }
 
 function applyFilters(items, fl){
   const q = fl.q.trim().toLowerCase();
@@ -537,11 +539,12 @@ function card(id, cls, title, html){
 function renderSummary(tab){
   const fl = getFilter(tab.name);
   const sources = TABS.filter(t=>!t.summary);
-  const gids = fl.src==='all' ? sources.map(t=>t.gid) : [fl.src];
+  const gids = fl.src==='all' ? sources.map(t=>t.gid) : fl.src==='xe' ? XE_GIDS : [fl.src];
   // หน้าสรุปจัดผลการทดสอบเป็น 4 กลุ่ม (ค่าอื่นนับเป็นรอทดสอบ)
   const all = gids.flatMap(toItems).map(i=>({...i, result:resultBucket(i.result)}));
   const items = applyFilters(all, fl);
-  const srcSel = `<label>ข้อมูลจากชีท<select data-k="src">${
+  const xeCount = XE_GIDS.reduce((n,g)=>n+(data[g]?.rows.length||0), 0);
+  const srcSel = `<label>ข้อมูลจากชีท<select data-k="src"><option value="xe"${fl.src==='xe'?' selected':''}>HOSxP XE (${xeCount})</option>${
     sources.map(t=>`<option value="${t.gid}"${fl.src===t.gid?' selected':''}>${esc(t.name)} (${data[t.gid]?.rows.length||0})</option>`).join('')
   }<option value="all"${fl.src==='all'?' selected':''}>ทุกชีทรวมกัน</option></select></label>`;
 
