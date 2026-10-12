@@ -65,6 +65,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
 .m5{--mbg:#f2e8f9;--mbd:#e0cdf0;--mfg:#6f3398}
 .m6{--mbg:#fdeaea;--mbd:#f6cccc;--mfg:#a12a2a}
 .m7{--mbg:#eef3e1;--mbd:#d9e5bd;--mfg:#556b1f}
+.m8{--mbg:#fdf6d8;--mbd:#f3e3a0;--mfg:#7a5c00}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .m0{--mbg:#232845;--mbd:#313968;--mfg:#b3bdf5}
   :root:not([data-theme="light"]) .m1{--mbg:#1b2a3a;--mbd:#25405a;--mfg:#9ccaf2}
@@ -74,6 +75,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
   :root:not([data-theme="light"]) .m5{--mbg:#2b2038;--mbd:#412f55;--mfg:#d4b3f0}
   :root:not([data-theme="light"]) .m6{--mbg:#3a1f1f;--mbd:#552a2a;--mfg:#f4b3b3}
   :root:not([data-theme="light"]) .m7{--mbg:#262d17;--mbd:#3a4522;--mfg:#cfe39a}
+  :root:not([data-theme="light"]) .m8{--mbg:#33290f;--mbd:#4d3e17;--mfg:#f0d48a}
 }
 main{border-top:3px solid var(--mbd)}
 nav a .n{font-weight:400;font-size:12px;margin-left:4px}
@@ -209,17 +211,18 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261012.104747';
+const APP_VERSION = '20261012.121115';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
-// color = เลขสีประจำเมนู (.m0–.m7) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
+// color = เลขสีประจำเมนู (.m0–.m8) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
 const TABS = [
   {name:'สรุป', gid:'750027123', summary:true, color:0},
   {name:'HOSxP V4', gid:'653470496', color:1},
+  {name:'ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น)', gid:'1356310016', color:8},
   {name:'ส่งออก', gid:'332727688', color:6},
   {name:'PPL', gid:'1701737701', color:2},
   {name:'Inventory', gid:'407999886', color:3},
@@ -325,7 +328,7 @@ function resolveFields(tab, headers){
     for(const n of names){ const i = headers.indexOf(n); if(i>=0){ f[k]=i; break; } }
   }
   f.image = headers.findIndex(h=>/^ภาพ/.test(h));
-  f.title = headers.indexOf('หัวข้อ');
+  f.title = headers.findIndex(h=>/^หัวข้อ/.test(h)); // เช่น หัวข้อ, หัวข้อ(what new)
   f.no = headers.indexOf('ลำดับ');
   f.date = headers.indexOf('วันที่');
   return f;
