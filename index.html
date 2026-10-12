@@ -63,6 +63,8 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
 .m3{--mbg:#fdefdc;--mbd:#f7d9b0;--mfg:#9a4f0b}
 .m4{--mbg:#dff4f6;--mbd:#bbe5ea;--mfg:#0b6f80}
 .m5{--mbg:#f2e8f9;--mbd:#e0cdf0;--mfg:#6f3398}
+.m6{--mbg:#fdeaea;--mbd:#f6cccc;--mfg:#a12a2a}
+.m7{--mbg:#eef3e1;--mbd:#d9e5bd;--mfg:#556b1f}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .m0{--mbg:#232845;--mbd:#313968;--mfg:#b3bdf5}
   :root:not([data-theme="light"]) .m1{--mbg:#1b2a3a;--mbd:#25405a;--mfg:#9ccaf2}
@@ -70,6 +72,8 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
   :root:not([data-theme="light"]) .m3{--mbg:#33281a;--mbd:#4d3a22;--mfg:#f2c68e}
   :root:not([data-theme="light"]) .m4{--mbg:#16303a;--mbd:#1f4855;--mfg:#8fd8e4}
   :root:not([data-theme="light"]) .m5{--mbg:#2b2038;--mbd:#412f55;--mfg:#d4b3f0}
+  :root:not([data-theme="light"]) .m6{--mbg:#3a1f1f;--mbd:#552a2a;--mfg:#f4b3b3}
+  :root:not([data-theme="light"]) .m7{--mbg:#262d17;--mbd:#3a4522;--mfg:#cfe39a}
 }
 main{border-top:3px solid var(--mbd)}
 nav a .n{font-weight:400;font-size:12px;margin-left:4px}
@@ -203,20 +207,23 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261007.160145';
+const APP_VERSION = '20261012.104430';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
+// color = เลขสีประจำเมนู (.m0–.m7) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
 const TABS = [
-  {name:'สรุป', gid:'750027123', summary:true},
-  {name:'HOSxP V4', gid:'653470496'},
-  {name:'PPL', gid:'1701737701'},
-  {name:'Inventory', gid:'407999886'},
-  {name:'Cloud', gid:'2062208758', result:'สถานะ'},
-  {name:'New Feture', gid:'1950255477', hide:['สถานะ']},
+  {name:'สรุป', gid:'750027123', summary:true, color:0},
+  {name:'HOSxP V4', gid:'653470496', color:1},
+  {name:'ส่งออก', gid:'332727688', color:6},
+  {name:'PPL', gid:'1701737701', color:2},
+  {name:'Inventory', gid:'407999886', color:3},
+  {name:'Cloud', gid:'2062208758', result:'สถานะ', color:4},
+  {name:'New Feture', gid:'1950255477', hide:['สถานะ'], color:5},
+  {name:'Back office', gid:'1412781504', color:7},
 ];
 // ใช้กับชีทที่ไม่มีแถวหัวตาราง (PPL, Inventory)
 const STD_HEADERS = ['ลำดับ','วันที่','กลุ่ม','ประเภท','หัวข้อ','รายละเอียดย่อ','โมดูล/หน้าจอ','ปัญหาที่พบ','สิ่งที่แก้ไข','วิธีตรวจสอบ','ภาพ/วิดีโอประกอบ','ผลการทดสอบ','ผู้ตรวจสอบ','หมายเหตุ'];
@@ -272,7 +279,7 @@ function buildTable(raw){
   const first = raw[0];
   const hasHeader = !/^\d+$/.test(norm(first[0])) && !isDate(first[0]);
   if(hasHeader){
-    headers = first.map((h,i)=> norm(h) || 'คอลัมน์ ' + String.fromCharCode(65+i));
+    headers = first.map((h,i)=> norm(h) || (i===0 ? 'ลำดับ' : 'คอลัมน์ ' + String.fromCharCode(65+i)));
     body = raw.slice(1);
   } else {
     headers = STD_HEADERS.slice();
@@ -811,9 +818,9 @@ function render(){
   const tab = currentTab();
   document.getElementById('nav').innerHTML = TABS.map(t=>{
     const cnt = t.summary ? '' : `<span class="n">${data[t.gid] ? data[t.gid].rows.length : ''}</span>`;
-    return `<a href="#${encodeURIComponent(t.name)}" class="m${TABS.indexOf(t)%6}${t===tab?' active':''}">${esc(t.name)}${cnt}</a>`;
+    return `<a href="#${encodeURIComponent(t.name)}" class="m${t.color}${t===tab?' active':''}">${esc(t.name)}${cnt}</a>`;
   }).join('');
-  document.getElementById('main').className = 'm' + TABS.indexOf(tab)%6;
+  document.getElementById('main').className = 'm' + tab.color;
   const main = document.getElementById('main');
   if(!loadedAt){ main.innerHTML = '<div class="empty">กำลังโหลดข้อมูลจาก Google Sheet…</div>'; return; }
   document.body.classList.toggle('sheet-view', !tab.summary);
