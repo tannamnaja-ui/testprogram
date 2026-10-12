@@ -211,7 +211,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261012.152701';
+const APP_VERSION = '20261012.165502';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -234,12 +234,13 @@ const TABS = [
 const STD_HEADERS = ['ลำดับ','วันที่','กลุ่ม','ประเภท','หัวข้อ','รายละเอียดย่อ','โมดูล/หน้าจอ','ปัญหาที่พบ','สิ่งที่แก้ไข','วิธีตรวจสอบ','ภาพ/วิดีโอประกอบ','ผลการทดสอบ','ผู้ตรวจสอบ','หมายเหตุ'];
 // คอลัมน์ที่ไม่แสดงในทุกเมนู
 const HIDE_COLS = /^review$/i;
+// ชื่อหัวคอลัมน์ของแต่ละช่อง (ข้อความ = ตรงทั้งคำ, RegExp = ตามรูปแบบ เช่น กลุ่ม(what new))
 const FIELD_NAMES = {
-  group:['กลุ่ม','Module'],
+  group:[/^กลุ่ม/, 'Module'],
   type:['ประเภท'],
   result:['ผลการทดสอบ','สถานะ'],
-  tester:['ผู้ตรวจสอบ','ผู้ทดสอบ'],
-  system:['ระบบงาน'],
+  tester:[/ผู้ตรวจสอบ/, /ผู้ทดสอบ/],  // เช่น ผู้ตรวจสอบ, หัวหน้าทีมผู้ตรวจสอบ
+  system:[/^ระบบงาน/],
 };
 const FILTER_LABELS = {group:'กลุ่ม', type:'ประเภท', result:'ผลการทดสอบ', tester:'ผู้ทดสอบ'};
 const GROUP_ORDER = ['คลินิก','เภสัชกรรม','การเงิน','ส่งออก/ส่งเบิก','เชื่อมต่อระบบอื่น','ระบบภายใน'];
@@ -325,7 +326,10 @@ function resolveFields(tab, headers){
   for(const k in FIELD_NAMES){
     const names = (k==='result' && tab.result) ? [tab.result] : FIELD_NAMES[k];
     f[k] = -1;
-    for(const n of names){ const i = headers.indexOf(n); if(i>=0){ f[k]=i; break; } }
+    for(const n of names){
+      const i = n instanceof RegExp ? headers.findIndex(h=>n.test(h)) : headers.indexOf(n);
+      if(i>=0){ f[k]=i; break; }
+    }
   }
   f.image = headers.findIndex(h=>/^ภาพ/.test(h));
   f.title = headers.findIndex(h=>/^หัวข้อ/.test(h)); // เช่น หัวข้อ, หัวข้อ(what new)
@@ -481,7 +485,7 @@ function renderSheet(tab){
   const fl = getFilter(tab.name);
   const all = toItems(tab.gid);
   const shown = applyFilters(all, fl);
-  const cls = h => h==='สิ่งที่แก้ไข' ? 'w-xl' : h==='โมดูล/หน้าจอ' ? 'w-mod' : h==='หมายเหตุ' ? 'w-note' : (h==='กลุ่ม' || h==='ประเภท') ? 'w-xs' : SHORT_COLS.test(h) ? 'w-s' : LONG_COLS.test(h) ? 'w-l' : 'w-m';
+  const cls = h => h==='สิ่งที่แก้ไข' ? 'w-xl' : h==='โมดูล/หน้าจอ' ? 'w-mod' : h==='หมายเหตุ' ? 'w-note' : (/^กลุ่ม/.test(h) || h==='ประเภท') ? 'w-xs' : SHORT_COLS.test(h) ? 'w-s' : LONG_COLS.test(h) ? 'w-l' : 'w-m';
   const resCol = t.f.result;
   // ลำดับคอลัมน์ที่แสดง: ย้ายผลการทดสอบมาต่อจากประเภท
   // ไม่แสดงคอลัมน์ที่ไม่มีชื่อหัวในชีท (เช่น คอลัมน์ H ของ New Feture)
