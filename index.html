@@ -211,7 +211,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261012.121115';
+const APP_VERSION = '20261012.123128';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -515,7 +515,7 @@ function resultBucket(v){
 // กล่องที่เลือกให้แสดง (ไม่เลือกเลยหรือเลือกทั้งหมด = แสดงทุกกล่อง)
 const SUMMARY_CARDS = [
   {id:'system', title:'สรุปตามระบบงานและประเภท', tint:'t2'},
-  {id:'group', title:'สรุปตามกลุ่มและประเภท', tint:'t1'},
+  {id:'group', title:"สรุปตามกลุ่มและประเภท(จาก What's New)", tint:'t1'},
   {id:'type', title:'ผลการทดสอบแยกตามประเภท', tint:'t3'},
   {id:'tester', title:'สรุปตามผู้ทดสอบ', tint:'t4'},
 ];
@@ -584,7 +584,7 @@ function renderSummary(tab){
     (items.length ? `<div class="cards">
       ${[
         cardShown('system') && card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0),
-        cardShown('group') && card('group', 'c1', 'สรุปตามกลุ่มและประเภท', t1),
+        cardShown('group') && card('group', 'c1', "สรุปตามกลุ่มและประเภท(จาก What's New)", t1),
         cardShown('type') && card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3),
         cardShown('tester') && card('tester', 'c4 full', 'สรุปตามผู้ทดสอบ', t4),
       ].filter(Boolean).join('<hr class="card-sep">')}
