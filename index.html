@@ -211,7 +211,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261012.140601';
+const APP_VERSION = '20261012.152507';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -578,7 +578,7 @@ function renderSummary(tab){
     <tr class="total"><td>รวมทั้งหมด</td>${resTotal}<td>${items.length}</td></tr></tbody></table>`;
 
   // 3) ผู้ทดสอบ
-  const t4 = `<table class="sum"><thead><tr><th>ผู้ทดสอบ</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
+  const t4 = `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${testers.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
     ${testers.map(p=>{ const pi=items.filter(i=>i.tester===p);
       return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${resCells(pi)}</tr>`; }).join('')}
     <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${resTotal}</tr></tbody></table>`;
