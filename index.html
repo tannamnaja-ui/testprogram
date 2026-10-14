@@ -132,6 +132,10 @@ table.data.fit{width:auto}
 .cell-in.saving{border-color:#d4a017;background:#fff8e1}
 .cell-in.saved{border-color:#2e9e5b}
 .cell-in.failed{border-color:var(--bad);background:var(--bad-bg)}
+.cell-sel{font:inherit;font-size:14px;font-weight:600;padding:3px 6px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;min-width:120px}
+.cell-sel.saving{outline:2px solid #d4a017}
+.cell-sel.saved{outline:2px solid #2e9e5b}
+.cell-sel.failed{outline:2px solid var(--bad)}
 .tablewrap{border-color:var(--grid)}
 /* หน้าตารางข้อมูล: ตารางเต็มความสูงจอที่เหลือ แถบเลื่อนแนวนอนจึงอยู่ล่างจอเสมอ */
 body.sheet-view{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
@@ -231,7 +235,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.124628';
+const APP_VERSION = '20261014.125139';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -393,6 +397,9 @@ async function loadAll(silent=false){
     }
   }));
   loadedAt = new Date();
+  if(!silent || refreshCount % 4 === 3){
+    loadRosterOpts().then(()=>silent ? softRender() : render()).catch(e=>console.warn('ตัวเลือก:', e.message));
+  }
   if(!silent || ++refreshCount % 4 === 0){
     loadDriveList().then(()=>silent ? softRender() : render()).catch(e=>console.warn('รายการรูป:', e.message));
   }
@@ -518,6 +525,36 @@ function rosterLists(t, order){
     return `<datalist id="dl-${i}">${[...vals].sort((a,b)=>a.localeCompare(b,'th')).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
   }).join('');
 }
+// ตัวเลือก dropdown ของคอลัมน์ในหน้ารายชื่อ (อ่านจาก Data validation ในชีท) และสีของแต่ละตัวเลือก
+let rosterOpts = {cols:{}, colors:{}};
+async function loadRosterOpts(){
+  if(!UPLOAD_URL || !TABS.some(t=>t.roster)) return;
+  const out = await jsonp(UPLOAD_URL + '?action=rosteropts');
+  if(out.ok && out.cols) rosterOpts = {cols: out.cols, colors: out.colors || {}};
+}
+// สีของตัวเลือก: ตามที่แสดงในชีท ถ้ายังไม่มีใครเลือกใช้ ใช้สีเดาจากคำ
+function optColor(v){
+  if(!v) return null;
+  if(rosterOpts.colors[v]) return rosterOpts.colors[v];
+  if(/ไม่ผ่าน|ยกเลิก/.test(v)) return {bg:'#ffcfc9', fg:'#b10202'};
+  if(/ไม่ได้|ไม่สามารถ|ติดปัญหา/.test(v)) return {bg:'#ffe5a0', fg:'#473821'};
+  if(/ผ่าน|เสร็จ|เรียบร้อย/.test(v)) return {bg:'#d4edbc', fg:'#11734b'};
+  if(/กำลัง|ระหว่าง/.test(v)) return {bg:'#c6dbe1', fg:'#215a6c'};
+  return {bg:'#e8eaed', fg:'#000000'};
+}
+function rosterSelect(gid, idx, i, value){
+  const t = data[gid], list = rosterOpts.cols[sheetCol(t, idx, i)].slice();
+  if(value && !list.includes(value)) list.unshift(value);
+  const c = optColor(value);
+  return `<select class="cell-sel" data-edit="${gid}:${idx}:${i}"${c ? ` style="background:${c.bg};color:${c.fg}"` : ''}>
+    <option value=""></option>${list.map(v=>{ const oc = optColor(v);
+      return `<option value="${esc(v)}" style="background:${oc.bg};color:${oc.fg}"${v===value?' selected':''}>${esc(v)}</option>`; }).join('')}</select>`;
+}
+function paintSelect(sel){
+  const c = optColor(sel.value);
+  sel.style.background = c ? c.bg : ''; sel.style.color = c ? c.fg : '';
+}
+
 async function saveRosterCell(inp){
   const [gid, idxStr, colStr] = inp.dataset.edit.split(':'); const idx = +idxStr, i = +colStr;
   const t = data[gid], value = inp.value.trim();
@@ -534,6 +571,7 @@ async function saveRosterCell(inp){
     if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการบันทึก กรุณาอัปเดตสคริปต์');
     t.rows[idx][i] = value; t.meta[idx].sheetRow = out.row;
     inp.classList.remove('saving'); inp.classList.add('saved');
+    if(inp.tagName==='SELECT') paintSelect(inp);
     document.getElementById('status').textContent = 'บันทึกลง Google Sheet แล้ว · ' + new Date().toLocaleTimeString('th-TH');
   }catch(e){
     inp.classList.remove('saving'); inp.classList.add('failed');
@@ -584,6 +622,8 @@ function renderSheet(tab){
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
       if(i===resCol) return `<td class="w-res">${norm(c) ? `<span class="badge ${resultClass(c)}">${esc(norm(c))}</span>` : ''}</td>`;
+      if(tab.roster && rosterOpts.cols[sheetCol(t, it.idx, i)])
+        return `<td class="edit">${rosterSelect(tab.gid, it.idx, i, norm(c))}</td>`;
       if(tab.roster && ROSTER_EDITABLE.includes(t.headers[i]))
         return `<td class="edit"><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
       return `<td class="${tab.roster ? '' : cls(t.headers[i])}">${linkify(norm(c))}</td>`;

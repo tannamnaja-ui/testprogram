@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเก
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'setcell') {
+  if (prm.action === 'rosteropts') {
+    try { out = rosterOptions(); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'setcell') {
     try { out = setRosterCell(prm); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'delete') {
@@ -66,6 +69,49 @@ function doGet(e) {
 const ROSTER_GID = '1921321948';
 const ROSTER_HEADER_ROW = 2;
 const ROSTER_EDITABLE = ['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'];
+
+// ตัวเลือก dropdown (Data validation) ของคอลัมน์ที่แก้ได้ + สีของตัวเลือกตามที่แสดงในชีท
+// สีอ่านจากหน้า HTML ของชีท จึงได้เฉพาะตัวเลือกที่มีคนเลือกใช้อยู่แล้ว
+function rosterOptions() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('rosteropts');
+  if (hit) return JSON.parse(hit);
+  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+    .find(s => String(s.getSheetId()) === ROSTER_GID);
+  if (!sh) throw new Error('ไม่พบแท็บรายชื่อ');
+  const lastCol = sh.getLastColumn();
+  const names = sh.getRange(ROSTER_HEADER_ROW, 1, 1, lastCol).getDisplayValues()[0];
+  const rules = sh.getRange(ROSTER_HEADER_ROW + 1, 1, 1, lastCol).getDataValidations()[0];
+  const cols = {};
+  names.forEach((n, i) => {
+    if (ROSTER_EDITABLE.indexOf(String(n).trim()) < 0) return;
+    const list = listOf(rules[i]);
+    if (list.length) cols[i + 1] = list;
+  });
+  const colors = {};
+  try {
+    const html = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID +
+      '/htmlview/sheet?headers=true&gid=' + ROSTER_GID, { muteHttpExceptions: true }).getContentText();
+    const re = /style="background-color: (#[0-9a-fA-F]{6}); color: (#[0-9a-fA-F]{6});[^"]*">([^<]+)<\/span>/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const text = m[3].replace(/​/g, '').trim();
+      if (text && !colors[text]) colors[text] = { bg: m[1], fg: m[2] };
+    }
+  } catch (err) { /* ไม่มีสีก็ยังเลือกได้ */ }
+  const out = { ok: true, cols, colors };
+  cache.put('rosteropts', JSON.stringify(out), 60);
+  return out;
+}
+
+function listOf(rule) {
+  if (!rule) return [];
+  const type = rule.getCriteriaType(), v = rule.getCriteriaValues();
+  const C = SpreadsheetApp.DataValidationCriteria;
+  if (type === C.VALUE_IN_LIST) return v[0].map(String).filter(String);
+  if (type === C.VALUE_IN_RANGE) return [].concat(...v[0].getDisplayValues()).map(String).filter(String);
+  return [];
+}
 
 function setRosterCell(prm) {
   const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
@@ -107,6 +153,7 @@ function setRosterCell(prm) {
       throw new Error('แถวไม่ถูกต้อง');
     }
     sh.getRange(row, col).setValue(value);
+    CacheService.getScriptCache().remove('rosteropts'); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
   } finally {
     lock.releaseLock();
   }
