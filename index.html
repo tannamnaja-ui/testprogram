@@ -123,6 +123,9 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 table.data.fit{width:auto}
 .data.fit th{white-space:pre-line}
 .data th.top{text-align:center;vertical-align:middle;font-weight:700}
+.roster-note{align-self:flex-end;flex:1 1 360px;background:#fff6d6;color:#5c4400;border:1px solid #f0d77a;border-radius:6px;padding:6px 10px;font-size:14px;font-weight:600;line-height:1.5}
+.roster-note a{color:#1d6fb8;word-break:break-all}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .roster-note{background:#3a2f12;color:#f3dc9a;border-color:#5c4a1d}:root:not([data-theme="light"]) .roster-note a{color:#7fb8ee}}
 .data td.edit{padding:3px 4px}
 .cell-in{font:inherit;font-size:14px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--text)}
 .cell-in:focus{outline:2px solid var(--accent);border-color:var(--accent)}
@@ -228,7 +231,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.124216';
+const APP_VERSION = '20261014.124628';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -540,7 +543,8 @@ async function saveRosterCell(inp){
 
 // แถบค้นหาแบบย่อ (หน้ารายชื่อไม่มีกลุ่ม/ประเภท/ผลการทดสอบ)
 function searchBar(fl){
-  return `<div class="filters"><div class="fld"><span class="fldhead"><span>ค้นหา</span><b id="count"></b></span><span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div></div>`;
+  return `<div class="filters"><div class="fld"><span class="fldhead"><span>ค้นหา</span><b id="count"></b></span><span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div>
+    <div class="roster-note">การทดสอบ ให้เป็นเวอร์ชั่นปัจจุบันเสมอ และต้องเข้าไปดูข้อมูลใน What's New ที่ลิงก์นี้ <a href="https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/" target="_blank" rel="noopener">https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/</a> ว่าระบบงานที่ตนเองทดสอบมีอะไรมาใหม่บ้างในทุกวัน</div></div>`;
 }
 // ตรึงคอลัมน์ซ้าย (เหมือนตรึงแนวใน Google Sheet): วัดความกว้างจริงแล้วตั้งตำแหน่ง sticky
 function applyFreeze(){
