@@ -140,6 +140,15 @@ table.data.fit{width:auto}
 .data td.ed.failed{box-shadow:inset 0 0 0 2px var(--bad)}
 .data td.ed textarea.ed-input{width:100%;min-width:220px;font:inherit;font-size:14px;line-height:1.5;padding:4px 6px;border:2px solid var(--accent);border-radius:4px;background:var(--panel);color:var(--text);resize:vertical;box-sizing:border-box}
 .data td.ed .ed-hint{font-size:11px;color:var(--muted);margin-top:2px;white-space:normal}
+/* ประวัติผู้แก้ไข */
+th.th-hist{min-width:230px}
+.data td.hist{min-width:230px;max-width:300px;white-space:normal;font-size:12.5px}
+.data td.hist .h-row{padding:2px 0;border-bottom:1px dashed var(--line);line-height:1.35}
+.data td.hist .h-row:last-child{border-bottom:0}
+.data td.hist .h-row:first-child b{color:var(--accent)}
+.data td.hist .h-col{display:inline-block;background:var(--head);border-radius:4px;padding:0 5px;font-size:11.5px}
+.data td.hist small{display:block;color:var(--muted)}
+.data td.hist{max-height:none}
 .cell-sel{font:inherit;font-size:14px;font-weight:600;padding:3px 6px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;min-width:120px}
 .cell-sel.saving{outline:2px solid #d4a017}
 .cell-sel.saved{outline:2px solid #2e9e5b}
@@ -244,7 +253,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.143414';
+const APP_VERSION = '20261014.144425';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -542,10 +551,24 @@ async function loadOpts(gid){
   const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid}));
   if(out.ok && out.cols) optsByGid[gid] = {cols: out.cols, colors: out.colors || {}};
 }
+// ประวัติผู้แก้ไขของแต่ละแถว (จากโน้ตของช่องในชีท): historyByGid[gid][เลขแถวในชีท] = [{who, when, col}] ล่าสุดอยู่บน
+const historyByGid = {};
+async function loadHistory(gid){
+  if(!UPLOAD_URL) return;
+  const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'notes', gid}));
+  if(out.ok && out.rows) historyByGid[gid] = out.rows;
+}
+function historyCell(gid, idx){
+  const list = (historyByGid[gid] || {})[data[gid].meta[idx].sheetRow] || [];
+  return `<td class="hist">${list.map(h=>{ const [name, ...dev] = h.who.split(' · ');
+    return `<div class="h-row"><b>${esc(name)}</b> <span class="h-col">${esc(h.col)}</span><small>${esc(h.when)}${dev.length ? ' · ' + esc(dev.join(' · ')) : ''}</small></div>`; }).join('')}</td>`;
+}
 // โหลดตัวเลือกของแท็บที่เปิดอยู่ (ทุก 2 นาที) แล้ววาดใหม่
 function ensureOpts(tab){
   if(!tab || tab.summary || Date.now() - (optsLoadedAt[tab.gid]||0) < 120000) return;
-  loadOpts(tab.gid).then(()=>{ if(currentTab()===tab && !editing) softRender(); }).catch(e=>console.warn('ตัวเลือก:', e.message));
+  const jobs = [loadOpts(tab.gid)];
+  if(!tab.roster) jobs.push(loadHistory(tab.gid));
+  Promise.all(jobs).then(()=>{ if(currentTab()===tab && !editing) softRender(); }).catch(e=>console.warn('ตัวเลือก/ประวัติ:', e.message));
 }
 // สีของตัวเลือก: ตามที่แสดงในชีท ถ้ายังไม่มีใครเลือกใช้ ใช้สีเดาจากคำ
 function optColor(v, gid){
@@ -681,6 +704,12 @@ async function closeEditor(newValue){
     if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการแก้ไข กรุณาอัปเดตสคริปต์');
     if(norm(out.value) !== norm(v)) throw new Error('ข้อมูลในชีทยังไม่เปลี่ยน (อาจมีคนแก้ช่องนี้พร้อมกัน หรือ Apps Script ยังไม่ได้อัปเดต)');
     t.rows[idx][i] = v; t.meta[idx].sheetRow = out.row;
+    const now = new Date(), two = n => String(n).padStart(2,'0');
+    const hist = (historyByGid[gid] ||= {});
+    (hist[out.row] ||= []).unshift({who: editorLabel(), col: t.headers[i],
+      when: `${two(now.getDate())}/${two(now.getMonth()+1)}/${now.getFullYear()} ${two(now.getHours())}:${two(now.getMinutes())}`});
+    const hc = td.parentElement && td.parentElement.querySelector('td.hist');
+    if(hc) hc.outerHTML = historyCell(gid, idx);
     td.classList.remove('saving'); td.classList.add('saved');
     document.getElementById('status').textContent = 'บันทึกลง Google Sheet แล้ว · ' + new Date().toLocaleTimeString('th-TH');
   }catch(e){
@@ -731,6 +760,7 @@ function renderSheet(tab){
   const order = t.headers.map((_,i)=>i).filter(i=>!/^คอลัมน์ /.test(t.headers[i]) && !HIDE_COLS.test(t.headers[i]) && !(tab.hide||[]).includes(t.headers[i]));
   const mv = t.headers.indexOf('ผลการทดสอบ') >= 0 ? t.headers.indexOf('ผลการทดสอบ') : resCol;
   if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
+  const showHist = !tab.roster && !!UPLOAD_URL;
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
       const ed = canEditItem(tab, t, i) ? ` ed" data-cell="${tab.gid}:${it.idx}:${i}" title="คลิกเพื่อแก้ไข (บันทึกลง Google Sheet อัตโนมัติ)` : '';
@@ -740,7 +770,7 @@ function renderSheet(tab){
       if(tab.roster && ROSTER_EDITABLE.includes(t.headers[i]))
         return `<td class="edit"><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
       return `<td class="${tab.roster ? '' : cls(t.headers[i])}${ed}">${linkify(norm(c))}</td>`;
-    }).join('')}</tr>`).join('');
+    }).join('')}${showHist ? historyCell(tab.gid, it.idx) : ''}</tr>`).join('');
   // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
   let topRow = '';
   if(t.top){
@@ -754,8 +784,8 @@ function renderSheet(tab){
     topRow = `<tr>${topRow}</tr>`;
   }
   return (tab.roster ? searchBar(fl) : filterBar(tab.name, all, fl)) +
-    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
-     <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>${tab.roster ? rosterLists(t, order) : ''}
+    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}${showHist ? '<th class="th-hist">ประวัติผู้แก้ไข</th>' : ''}</tr></thead>
+     <tbody>${body || `<tr><td colspan="${order.length + (showHist?1:0)}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>${tab.roster ? rosterLists(t, order) : ''}
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
 

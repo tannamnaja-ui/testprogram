@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเก
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'getitem') {
+  if (prm.action === 'notes') {
+    try { out = editHistory(prm.gid); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'getitem') {
     try { out = getItemCell(JSON.parse(prm.p || '{}')); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'opts' || prm.action === 'rosteropts') {
@@ -74,6 +77,29 @@ function noteEditor(range, editor) {
   const line = 'แก้ไขโดย ' + editor + ' เมื่อ ' + when;
   const old = String(range.getNote() || '').split('\n').filter(l => l.indexOf('แก้ไขโดย ') === 0);
   range.setNote([line].concat(old).slice(0, 10).join('\n'));
+}
+
+// ประวัติผู้แก้ไขของทุกแถวในแท็บ (อ่านจากโน้ตของแต่ละช่อง) ล่าสุดอยู่บน
+function editHistory(gid) {
+  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+    .find(s => String(s.getSheetId()) === String(gid));
+  if (!sh) throw new Error('ไม่พบแท็บ');
+  const range = sh.getDataRange();
+  const notes = range.getNotes();
+  const heads = (notes.length ? sh.getRange(1, 1, 1, range.getNumColumns()).getDisplayValues()[0] : []).map(h => String(h).trim());
+  const re = /^แก้ไขโดย (.+) เมื่อ (\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/;
+  const rows = {};
+  notes.forEach((r, i) => r.forEach((n, j) => {
+    if (!n) return;
+    String(n).split('\n').forEach(line => {
+      const m = line.trim().match(re);
+      if (!m) return;
+      (rows[i + 1] = rows[i + 1] || []).push({ who: m[1], when: m[2] + '/' + m[3] + '/' + m[4] + ' ' + m[5] + ':' + m[6],
+        ts: Date.UTC(+m[4], +m[3] - 1, +m[2], +m[5], +m[6]), col: heads[j] || '' });
+    });
+  }));
+  for (const k in rows) rows[k].sort((a, b) => b.ts - a.ts);
+  return { ok: true, rows };
 }
 
 // ---------- แก้ไขหน้ารายชื่อ ----------
