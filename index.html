@@ -132,6 +132,14 @@ table.data.fit{width:auto}
 .cell-in.saving{border-color:#d4a017;background:#fff8e1}
 .cell-in.saved{border-color:#2e9e5b}
 .cell-in.failed{border-color:var(--bad);background:var(--bad-bg)}
+/* ช่องที่แก้ไขได้ในหน้ารายการ */
+.data td.ed{cursor:text}
+.data td.ed:hover{box-shadow:inset 0 0 0 1px var(--accent)}
+.data td.ed.saving{background:#fff8e1 !important}
+.data td.ed.saved{box-shadow:inset 0 0 0 2px #2e9e5b}
+.data td.ed.failed{box-shadow:inset 0 0 0 2px var(--bad)}
+.data td.ed textarea.ed-input{width:100%;min-width:220px;font:inherit;font-size:14px;line-height:1.5;padding:4px 6px;border:2px solid var(--accent);border-radius:4px;background:var(--panel);color:var(--text);resize:vertical;box-sizing:border-box}
+.data td.ed .ed-hint{font-size:11px;color:var(--muted);margin-top:2px;white-space:normal}
 .cell-sel{font:inherit;font-size:14px;font-weight:600;padding:3px 6px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;min-width:120px}
 .cell-sel.saving{outline:2px solid #d4a017}
 .cell-sel.saved{outline:2px solid #2e9e5b}
@@ -235,7 +243,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.125139';
+const APP_VERSION = '20261014.135801';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -264,7 +272,7 @@ const HIDE_COLS = /^review$/i;
 const FIELD_NAMES = {
   group:[/^กลุ่ม/, 'Module'],
   type:['ประเภท'],
-  result:['ผลการทดสอบ','สถานะ'],
+  result:['ผลการทดสอบ', /^ผลการทดสอบ/, 'สถานะ'],
   tester:[/ผู้ตรวจสอบ/, /ผู้ทดสอบ/],  // เช่น ผู้ตรวจสอบ, หัวหน้าทีมผู้ตรวจสอบ
   system:[/^ระบบงาน/],
 };
@@ -348,7 +356,7 @@ function buildTable(raw, opts={}){
   const colIdx = headers.map((_,i)=>i).filter(i=>keep[i]); // ตำแหน่งคอลัมน์ก่อนตัด
   headers = headers.filter((_,i)=>keep[i]);
   rows = rows.map(r=>r.filter((_,i)=>keep[i]));
-  return {headers, rows, meta, colIdx, top};
+  return {headers, rows, meta, colIdx, top, sheetHeader: hasHeader && !(opts.headerRow > 1)};
 }
 
 // เลขคอลัมน์จริงในชีท (1-based) ของช่อง i ในแถว idx
@@ -366,6 +374,7 @@ function resolveFields(tab, headers){
   }
   f.image = headers.findIndex(h=>/^ภาพ/.test(h));
   f.title = headers.findIndex(h=>/^หัวข้อ/.test(h)); // เช่น หัวข้อ, หัวข้อ(what new)
+  if(f.title<0) f.title = headers.indexOf('รายการ'); // New Feture
   f.no = headers.indexOf('ลำดับ');
   f.date = headers.indexOf('วันที่');
   return f;
@@ -397,9 +406,7 @@ async function loadAll(silent=false){
     }
   }));
   loadedAt = new Date();
-  if(!silent || refreshCount % 4 === 3){
-    loadRosterOpts().then(()=>silent ? softRender() : render()).catch(e=>console.warn('ตัวเลือก:', e.message));
-  }
+  ensureOpts(currentTab());
   if(!silent || ++refreshCount % 4 === 0){
     loadDriveList().then(()=>silent ? softRender() : render()).catch(e=>console.warn('รายการรูป:', e.message));
   }
@@ -429,8 +436,8 @@ const AUTO_REFRESH_SEC = 30;
 let refreshCount = 0, uploading = false;
 function canAutoRefresh(){
   const a = document.activeElement;
-  return !document.hidden && !uploading && document.getElementById('viewer').hidden
-    && !(a && (a.tagName==='SELECT' || (a.tagName==='INPUT' && a.type!=='checkbox')));
+  return !document.hidden && !uploading && !editing && document.getElementById('viewer').hidden
+    && !(a && (a.tagName==='SELECT' || a.tagName==='TEXTAREA' || (a.tagName==='INPUT' && a.type!=='checkbox')));
 }
 // วาดใหม่โดยคงตำแหน่งเลื่อนหน้าจอไว้
 function softRender(){
@@ -525,17 +532,25 @@ function rosterLists(t, order){
     return `<datalist id="dl-${i}">${[...vals].sort((a,b)=>a.localeCompare(b,'th')).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
   }).join('');
 }
-// ตัวเลือก dropdown ของคอลัมน์ในหน้ารายชื่อ (อ่านจาก Data validation ในชีท) และสีของแต่ละตัวเลือก
-let rosterOpts = {cols:{}, colors:{}};
-async function loadRosterOpts(){
-  if(!UPLOAD_URL || !TABS.some(t=>t.roster)) return;
-  const out = await jsonp(UPLOAD_URL + '?action=rosteropts');
-  if(out.ok && out.cols) rosterOpts = {cols: out.cols, colors: out.colors || {}};
+// ตัวเลือก dropdown ของแต่ละแท็บ (อ่านจาก Data validation ในชีท) และสีของแต่ละตัวเลือก
+const optsByGid = {}, optsLoadedAt = {};
+const tabOpts = gid => optsByGid[gid] || {cols:{}, colors:{}};
+async function loadOpts(gid){
+  if(!UPLOAD_URL) return;
+  optsLoadedAt[gid] = Date.now();
+  const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid}));
+  if(out.ok && out.cols) optsByGid[gid] = {cols: out.cols, colors: out.colors || {}};
+}
+// โหลดตัวเลือกของแท็บที่เปิดอยู่ (ทุก 2 นาที) แล้ววาดใหม่
+function ensureOpts(tab){
+  if(!tab || tab.summary || Date.now() - (optsLoadedAt[tab.gid]||0) < 120000) return;
+  loadOpts(tab.gid).then(()=>{ if(currentTab()===tab && !editing) softRender(); }).catch(e=>console.warn('ตัวเลือก:', e.message));
 }
 // สีของตัวเลือก: ตามที่แสดงในชีท ถ้ายังไม่มีใครเลือกใช้ ใช้สีเดาจากคำ
-function optColor(v){
+function optColor(v, gid){
   if(!v) return null;
-  if(rosterOpts.colors[v]) return rosterOpts.colors[v];
+  const sheet = tabOpts(gid).colors;
+  if(sheet[v]) return sheet[v];
   if(/ไม่ผ่าน|ยกเลิก/.test(v)) return {bg:'#ffcfc9', fg:'#b10202'};
   if(/ไม่ได้|ไม่สามารถ|ติดปัญหา/.test(v)) return {bg:'#ffe5a0', fg:'#473821'};
   if(/ผ่าน|เสร็จ|เรียบร้อย/.test(v)) return {bg:'#d4edbc', fg:'#11734b'};
@@ -543,15 +558,15 @@ function optColor(v){
   return {bg:'#e8eaed', fg:'#000000'};
 }
 function rosterSelect(gid, idx, i, value){
-  const t = data[gid], list = rosterOpts.cols[sheetCol(t, idx, i)].slice();
+  const t = data[gid], list = tabOpts(gid).cols[sheetCol(t, idx, i)].slice();
   if(value && !list.includes(value)) list.unshift(value);
-  const c = optColor(value);
+  const c = optColor(value, gid);
   return `<select class="cell-sel" data-edit="${gid}:${idx}:${i}"${c ? ` style="background:${c.bg};color:${c.fg}"` : ''}>
-    <option value=""></option>${list.map(v=>{ const oc = optColor(v);
+    <option value=""></option>${list.map(v=>{ const oc = optColor(v, gid);
       return `<option value="${esc(v)}" style="background:${oc.bg};color:${oc.fg}"${v===value?' selected':''}>${esc(v)}</option>`; }).join('')}</select>`;
 }
 function paintSelect(sel){
-  const c = optColor(sel.value);
+  const c = optColor(sel.value, (sel.dataset.edit||'').split(':')[0]);
   sel.style.background = c ? c.bg : ''; sel.style.color = c ? c.fg : '';
 }
 
@@ -577,6 +592,71 @@ async function saveRosterCell(inp){
     inp.classList.remove('saving'); inp.classList.add('failed');
     alert('บันทึกไม่สำเร็จ: ' + e.message);
   }
+}
+
+// ---------- แก้ไขหน้ารายการ: คลิกช่อง > แก้ > บันทึกลง Google Sheet อัตโนมัติ ----------
+// แก้ได้เฉพาะคอลัมน์ที่หัวตารางขึ้นต้นด้วยชื่อเหล่านี้ และเฉพาะชีทที่มีแถวหัวตารางในแถว 1
+const ITEM_EDITABLE = ['ระบบงาน', 'ปัญหาที่พบ', 'สิ่งที่แก้ไข', 'วิธีตรวจสอบ', 'ผลการทดสอบ', 'หมายเหตุ'];
+const canEditItem = (tab, t, i) => !!UPLOAD_URL && !tab.roster && !tab.summary && t.sheetHeader && ITEM_EDITABLE.some(x=>t.headers[i].startsWith(x));
+let editing = null;
+function itemCellHtml(t, i, v){
+  v = norm(v);
+  if(i===t.f.result) return v ? `<span class="badge ${resultClass(v)}">${esc(v)}</span>` : '';
+  return linkify(v);
+}
+function rowMatch(t, idx){
+  return [t.f.title, t.f.no].filter(i=>i>=0 && norm(t.rows[idx][i]))
+    .map(i=>({col:sheetCol(t, idx, i), value:norm(t.rows[idx][i]), header:t.headers[i]}));
+}
+function openEditor(td){
+  if(editing) return;
+  const [gid, idxStr, colStr] = td.dataset.cell.split(':'); const idx = +idxStr, i = +colStr;
+  const t = data[gid], value = norm(t.rows[idx][i]);
+  const list = tabOpts(gid).cols[sheetCol(t, idx, i)];
+  editing = {td, gid, idx, i, value};
+  td.classList.remove('saved','failed');
+  if(list){
+    const opts = list.includes(value) || !value ? list : [value, ...list];
+    td.innerHTML = `<select class="cell-sel ed-input"><option value=""></option>${opts.map(v=>{ const c = optColor(v, gid);
+      return `<option value="${esc(v)}" style="background:${c.bg};color:${c.fg}"${v===value?' selected':''}>${esc(v)}</option>`; }).join('')}</select>`;
+  }else{
+    td.innerHTML = `<textarea class="ed-input" rows="3">${esc(value)}</textarea><div class="ed-hint">Ctrl+Enter หรือคลิกที่อื่น = บันทึก · Esc = ยกเลิก</div>`;
+  }
+  const inp = td.querySelector('.ed-input');
+  const grow = ()=>{ if(inp.tagName==='TEXTAREA'){ inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight + 4, 420) + 'px'; } };
+  grow(); inp.focus();
+  inp.addEventListener('input', grow);
+  inp.addEventListener('keydown', e=>{
+    if(e.key==='Escape'){ e.preventDefault(); closeEditor(null); }
+    else if(e.key==='Enter' && (e.ctrlKey || e.metaKey || inp.tagName==='SELECT')){ e.preventDefault(); inp.blur(); }
+  });
+  if(inp.tagName==='SELECT') inp.addEventListener('change', ()=>inp.blur());
+  inp.addEventListener('blur', ()=>{ if(editing && editing.td===td) closeEditor(inp.value); });
+}
+async function closeEditor(newValue){
+  const ed = editing; if(!ed) return;
+  const {td, gid, idx, i, value} = ed, t = data[gid];
+  const v = newValue==null ? value : newValue.replace(/\s+$/,'');
+  td.innerHTML = itemCellHtml(t, i, v);
+  if(newValue==null || v===value){ editing = null; return; }
+  td.classList.add('saving');
+  const p = {gid, header:t.headers[i], col:sheetCol(t, idx, i), row:t.meta[idx].sheetRow, match:rowMatch(t, idx)};
+  try{
+    // ส่งแบบ POST (ข้อความยาวได้) แล้วอ่านค่ากลับจากชีทเพื่อยืนยันว่าบันทึกแล้ว
+    await fetch(UPLOAD_URL, {method:'POST', mode:'no-cors', credentials:'omit',
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'setitem', ...p, value:v})});
+    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'getitem', p:JSON.stringify(p)}));
+    if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการแก้ไข กรุณาอัปเดตสคริปต์');
+    if(norm(out.value) !== norm(v)) throw new Error('ข้อมูลในชีทยังไม่เปลี่ยน (อาจมีคนแก้ช่องนี้พร้อมกัน หรือ Apps Script ยังไม่ได้อัปเดต)');
+    t.rows[idx][i] = v; t.meta[idx].sheetRow = out.row;
+    td.classList.remove('saving'); td.classList.add('saved');
+    document.getElementById('status').textContent = 'บันทึกลง Google Sheet แล้ว · ' + new Date().toLocaleTimeString('th-TH');
+  }catch(e){
+    td.classList.remove('saving'); td.classList.add('failed');
+    td.innerHTML = itemCellHtml(t, i, value);
+    alert('บันทึกไม่สำเร็จ: ' + e.message);
+  }
+  editing = null;
 }
 
 // แถบค้นหาแบบย่อ (หน้ารายชื่อไม่มีกลุ่ม/ประเภท/ผลการทดสอบ)
@@ -621,12 +701,13 @@ function renderSheet(tab){
   if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
-      if(i===resCol) return `<td class="w-res">${norm(c) ? `<span class="badge ${resultClass(c)}">${esc(norm(c))}</span>` : ''}</td>`;
-      if(tab.roster && rosterOpts.cols[sheetCol(t, it.idx, i)])
+      const ed = canEditItem(tab, t, i) ? ` ed" data-cell="${tab.gid}:${it.idx}:${i}" title="คลิกเพื่อแก้ไข (บันทึกลง Google Sheet อัตโนมัติ)` : '';
+      if(i===resCol) return `<td class="w-res${ed}">${itemCellHtml(t, i, c)}</td>`;
+      if(tab.roster && tabOpts(tab.gid).cols[sheetCol(t, it.idx, i)])
         return `<td class="edit">${rosterSelect(tab.gid, it.idx, i, norm(c))}</td>`;
       if(tab.roster && ROSTER_EDITABLE.includes(t.headers[i]))
         return `<td class="edit"><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
-      return `<td class="${tab.roster ? '' : cls(t.headers[i])}">${linkify(norm(c))}</td>`;
+      return `<td class="${tab.roster ? '' : cls(t.headers[i])}${ed}">${linkify(norm(c))}</td>`;
     }).join('')}</tr>`).join('');
   // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
   let topRow = '';
@@ -981,6 +1062,8 @@ function render(){
   document.body.classList.toggle('sheet-view', !tab.summary);
   main.innerHTML = tab.summary ? renderSummary(tab) : renderSheet(tab);
   applyFreeze();
+  if(editing && !document.body.contains(editing.td)) editing = null; // ช่องที่กำลังแก้ถูกวาดใหม่ไปแล้ว
+  ensureOpts(tab);
   const meta = main.querySelector('script[type=x]');
   if(meta){ const [a,b]=meta.textContent.split('/'); document.getElementById('count').textContent = `แสดง ${a} จาก ${b} รายการ`; }
 }
@@ -1012,6 +1095,8 @@ document.getElementById('main').addEventListener('input', e=>{
   }, 250);
 });
 document.getElementById('main').addEventListener('click', e=>{
+  const cell = e.target.closest('td[data-cell]');
+  if(cell && !e.target.closest('a, .ed-input')){ openEditor(cell); return; }
   const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
   if(v){ const [gid, idx] = v.dataset.view.split(':'); openViewer(rowMedia(gid, +idx).urls, gid, +idx); return; }
   if(u){

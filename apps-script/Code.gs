@@ -31,8 +31,11 @@ const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเก
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'rosteropts') {
-    try { out = rosterOptions(); }
+  if (prm.action === 'getitem') {
+    try { out = getItemCell(JSON.parse(prm.p || '{}')); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'opts' || prm.action === 'rosteropts') {
+    try { out = tabOptions(prm.gid || ROSTER_GID); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'setcell') {
     try { out = setRosterCell(prm); }
@@ -70,28 +73,33 @@ const ROSTER_GID = '1921321948';
 const ROSTER_HEADER_ROW = 2;
 const ROSTER_EDITABLE = ['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'];
 
-// ตัวเลือก dropdown (Data validation) ของคอลัมน์ที่แก้ได้ + สีของตัวเลือกตามที่แสดงในชีท
+// ตัวเลือก dropdown (Data validation) ของคอลัมน์ที่แก้ได้ในแท็บนั้น + สีของตัวเลือกตามที่แสดงในชีท
 // สีอ่านจากหน้า HTML ของชีท จึงได้เฉพาะตัวเลือกที่มีคนเลือกใช้อยู่แล้ว
-function rosterOptions() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get('rosteropts');
+function tabOptions(gid) {
+  gid = String(gid);
+  const roster = gid === ROSTER_GID;
+  const cache = CacheService.getScriptCache(), key = 'opts:' + gid;
+  const hit = cache.get(key);
   if (hit) return JSON.parse(hit);
   const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
-    .find(s => String(s.getSheetId()) === ROSTER_GID);
-  if (!sh) throw new Error('ไม่พบแท็บรายชื่อ');
+    .find(s => String(s.getSheetId()) === gid);
+  if (!sh) throw new Error('ไม่พบแท็บ');
+  const headerRow = roster ? ROSTER_HEADER_ROW : 1;
   const lastCol = sh.getLastColumn();
-  const names = sh.getRange(ROSTER_HEADER_ROW, 1, 1, lastCol).getDisplayValues()[0];
-  const rules = sh.getRange(ROSTER_HEADER_ROW + 1, 1, 1, lastCol).getDataValidations()[0];
+  if (sh.getLastRow() <= headerRow) return { ok: true, cols: {}, colors: {} };
+  const names = sh.getRange(headerRow, 1, 1, lastCol).getDisplayValues()[0];
+  const rules = sh.getRange(headerRow + 1, 1, 1, lastCol).getDataValidations()[0];
   const cols = {};
   names.forEach((n, i) => {
-    if (ROSTER_EDITABLE.indexOf(String(n).trim()) < 0) return;
+    n = String(n).trim();
+    if (roster ? ROSTER_EDITABLE.indexOf(n) < 0 : !isItemEditable(n)) return;
     const list = listOf(rules[i]);
     if (list.length) cols[i + 1] = list;
   });
   const colors = {};
   try {
     const html = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID +
-      '/htmlview/sheet?headers=true&gid=' + ROSTER_GID, { muteHttpExceptions: true }).getContentText();
+      '/htmlview/sheet?headers=true&gid=' + gid, { muteHttpExceptions: true }).getContentText();
     const re = /style="background-color: (#[0-9a-fA-F]{6}); color: (#[0-9a-fA-F]{6});[^"]*">([^<]+)<\/span>/g;
     let m;
     while ((m = re.exec(html))) {
@@ -100,7 +108,7 @@ function rosterOptions() {
     }
   } catch (err) { /* ไม่มีสีก็ยังเลือกได้ */ }
   const out = { ok: true, cols, colors };
-  cache.put('rosteropts', JSON.stringify(out), 60);
+  try { cache.put(key, JSON.stringify(out), roster ? 60 : 600); } catch (err) { /* ใหญ่เกิน cache */ }
   return out;
 }
 
@@ -153,11 +161,56 @@ function setRosterCell(prm) {
       throw new Error('แถวไม่ถูกต้อง');
     }
     sh.getRange(row, col).setValue(value);
-    CacheService.getScriptCache().remove('rosteropts'); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
+    CacheService.getScriptCache().remove('opts:' + ROSTER_GID); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
   } finally {
     lock.releaseLock();
   }
   return { ok: true, row, col, value };
+}
+
+// ---------- แก้ไขหน้ารายการ (ทุกแท็บที่มีหัวตารางในแถว 1) ----------
+// แก้ได้เฉพาะคอลัมน์ที่หัวตารางขึ้นต้นด้วยชื่อเหล่านี้ เช่น "วิธีตรวจสอบ/ทดสอบ", "ผลการทดสอบ MySQL"
+const ITEM_EDITABLE = ['ระบบงาน', 'ปัญหาที่พบ', 'สิ่งที่แก้ไข', 'วิธีตรวจสอบ', 'ผลการทดสอบ', 'หมายเหตุ'];
+const isItemEditable = h => ITEM_EDITABLE.some(x => String(h).trim().indexOf(x) === 0);
+
+// หาแถวและคอลัมน์ของช่องที่จะแก้ (ถ้ามีการแทรกแถว/คอลัมน์ ให้ค้นจากหัวข้อและชื่อคอลัมน์)
+function resolveItemCell(p) {
+  if (String(p.gid) === ROSTER_GID) throw new Error('แท็บนี้ใช้การแก้ไขของหน้ารายชื่อ');
+  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+    .find(s => String(s.getSheetId()) === String(p.gid));
+  if (!sh) throw new Error('ไม่พบแท็บ');
+  const header = String(p.header || '').trim();
+  if (!isItemEditable(header)) throw new Error('แก้ได้เฉพาะคอลัมน์ ' + ITEM_EDITABLE.join(', '));
+  const heads = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(h => String(h).trim());
+  let col = Number(p.col);
+  if (heads[col - 1] !== header) {
+    col = heads.indexOf(header) + 1;
+    if (col < 1) throw new Error('ไม่พบคอลัมน์ ' + header + ' ในแถวหัวตาราง กรุณาโหลดข้อมูลใหม่');
+  }
+  // คอลัมน์ที่ใช้ระบุแถว (หัวข้อ/ลำดับ) อาจเลื่อน: หาตำแหน่งใหม่จากชื่อหัวตาราง
+  (p.match || []).forEach(m => { if (m.header && heads[m.col - 1] !== m.header) { const c = heads.indexOf(m.header); if (c >= 0) m.col = c + 1; } });
+  const row = findRow(sh, p);
+  if (row < 2) throw new Error('แถวไม่ถูกต้อง');
+  return { sh, row, col };
+}
+
+function setItemCell(p) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const c = resolveItemCell(p);
+    const value = String(p.value == null ? '' : p.value).slice(0, 40000);
+    c.sh.getRange(c.row, c.col).setValue(value);
+    return { ok: true, row: c.row, col: c.col };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// อ่านค่าปัจจุบันของช่อง (หน้าเว็บใช้ยืนยันหลังส่งแบบ POST ซึ่งอ่านคำตอบไม่ได้)
+function getItemCell(p) {
+  const c = resolveItemCell(p);
+  return { ok: true, row: c.row, col: c.col, value: String(c.sh.getRange(c.row, c.col).getDisplayValue()) };
 }
 
 // ---------- ลบรูป ----------
@@ -244,6 +297,13 @@ function verifyIdToken(token) {
 }
 
 function doPost(e) {
+  // แก้ไขช่องในหน้ารายการ (ส่งแบบ POST เพราะข้อความยาว)
+  try {
+    const body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : null;
+    if (body && body.action === 'setitem') return reply(setItemCell(body));
+  } catch (err) {
+    return reply({ ok: false, error: String((err && err.message) || err) });
+  }
   // navigator.sendBeacon ตอนปิดหน้า: ?action=leave&vid=...
   if (e && e.parameter && e.parameter.action === 'leave') {
     try { presence(e.parameter); } catch (err) { /* ไม่ต้องทำอะไร */ }
