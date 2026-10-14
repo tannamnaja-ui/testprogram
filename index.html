@@ -227,6 +227,7 @@ a{color:var(--accent)}
   <span class="spacer"></span>
   <details id="presence" hidden></details>
   <div id="signin"></div>
+  <button id="editorBtn" class="btn-sm" title="ชื่อที่บันทึกเป็นผู้แก้ไขในชีท (กดเพื่อเปลี่ยน)"></button>
   <a id="sheetLink" class="edit-link" target="_blank" rel="noopener">เปิด Google Sheet เพื่อแก้ไข</a>
   <button id="reload">โหลดข้อมูลใหม่</button>
 </header>
@@ -243,7 +244,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.135801';
+const APP_VERSION = '20261014.140438';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -260,7 +261,7 @@ const TABS = [
   {name:'ส่งออก', gid:'332727688', color:6},
   {name:'PPL', gid:'1701737701', color:2},
   {name:'Inventory', gid:'407999886', color:3},
-  {name:'Cloud', gid:'2062208758', result:'สถานะ', color:4},
+  {name:'Cloud', gid:'2062208758', color:4},
   {name:'New Feture', gid:'1950255477', hide:['สถานะ'], color:5},
   {name:'Back office', gid:'1412781504', color:7},
 ];
@@ -575,6 +576,7 @@ async function saveRosterCell(inp){
   const t = data[gid], value = inp.value.trim();
   if(value === norm(t.rows[idx][i])) return;
   if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่า Apps Script'); return; }
+  if(!askEditorName()){ inp.value = norm(t.rows[idx][i]); if(inp.tagName==='SELECT') paintSelect(inp); return; }
   const nameCol = t.headers.findIndex(h=>/ชื่อ-นามสกุล/.test(h));
   inp.classList.remove('saved','failed'); inp.classList.add('saving');
   try{
@@ -582,7 +584,7 @@ async function saveRosterCell(inp){
     let week = '';
     for(let k=t.colIdx[i]; k>=0 && !week; k--) week = (t.top && t.top[k]) || '';
     const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'setcell', row:t.meta[idx].sheetRow, col:sheetCol(t, idx, i),
-      header:t.headers[i], week, value, ncol: nameCol>=0 ? sheetCol(t, idx, nameCol) : '', name: nameCol>=0 ? norm(t.rows[idx][nameCol]) : ''}));
+      header:t.headers[i], week, value, editor:editorLabel(), ncol: nameCol>=0 ? sheetCol(t, idx, nameCol) : '', name: nameCol>=0 ? norm(t.rows[idx][nameCol]) : ''}));
     if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการบันทึก กรุณาอัปเดตสคริปต์');
     t.rows[idx][i] = value; t.meta[idx].sheetRow = out.row;
     inp.classList.remove('saving'); inp.classList.add('saved');
@@ -593,6 +595,36 @@ async function saveRosterCell(inp){
     alert('บันทึกไม่สำเร็จ: ' + e.message);
   }
 }
+
+// ---------- ชื่อผู้แก้ไข ----------
+// เบราว์เซอร์อ่านชื่อคอมพิวเตอร์ไม่ได้: ใช้บัญชี Google ถ้าเข้าสู่ระบบ ไม่อย่างนั้นถามชื่อครั้งแรกแล้วจำไว้ในเบราว์เซอร์นี้
+function storedEditor(){ try{ return localStorage.getItem('editorName') || ''; }catch(e){ return ''; } }
+function deviceLabel(){
+  const ua = navigator.userAgent;
+  const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'อุปกรณ์อื่น';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'เบราว์เซอร์อื่น';
+  return os + ' · ' + br;
+}
+function editorLabel(){
+  const who = (typeof me!=='undefined' && me) ? `${me.name} (${me.email})` : (storedEditor() || 'ไม่ระบุชื่อ');
+  return `${who} · ${deviceLabel()}`;
+}
+function askEditorName(force){
+  if(!force && ((typeof me!=='undefined' && me) || storedEditor())) return true;
+  const name = prompt('กรุณาใส่ชื่อของคุณ เพื่อบันทึกเป็นผู้แก้ไขใน Google Sheet\n(ระบบจะจำไว้ในเบราว์เซอร์นี้ เปลี่ยนได้ที่ปุ่มชื่อมุมขวาบน)', storedEditor());
+  if(name==null) return !!storedEditor(); // กดยกเลิก: ใช้ชื่อเดิมถ้ามี
+  if(!name.trim()) return false;
+  try{ localStorage.setItem('editorName', name.trim()); }catch(e){}
+  showEditorBtn();
+  return true;
+}
+function showEditorBtn(){
+  const b = document.getElementById('editorBtn');
+  const who = (typeof me!=='undefined' && me) ? me.name : storedEditor();
+  b.hidden = !UPLOAD_URL;
+  b.textContent = '✎ ผู้แก้ไข: ' + (who || 'ยังไม่ได้ตั้งชื่อ');
+}
+document.getElementById('editorBtn').addEventListener('click', ()=>{ askEditorName(true); showEditorBtn(); });
 
 // ---------- แก้ไขหน้ารายการ: คลิกช่อง > แก้ > บันทึกลง Google Sheet อัตโนมัติ ----------
 // แก้ได้เฉพาะคอลัมน์ที่หัวตารางขึ้นต้นด้วยชื่อเหล่านี้ และเฉพาะชีทที่มีแถวหัวตารางในแถว 1
@@ -609,7 +641,7 @@ function rowMatch(t, idx){
     .map(i=>({col:sheetCol(t, idx, i), value:norm(t.rows[idx][i]), header:t.headers[i]}));
 }
 function openEditor(td){
-  if(editing) return;
+  if(editing || !askEditorName()) return;
   const [gid, idxStr, colStr] = td.dataset.cell.split(':'); const idx = +idxStr, i = +colStr;
   const t = data[gid], value = norm(t.rows[idx][i]);
   const list = tabOpts(gid).cols[sheetCol(t, idx, i)];
@@ -644,7 +676,7 @@ async function closeEditor(newValue){
   try{
     // ส่งแบบ POST (ข้อความยาวได้) แล้วอ่านค่ากลับจากชีทเพื่อยืนยันว่าบันทึกแล้ว
     await fetch(UPLOAD_URL, {method:'POST', mode:'no-cors', credentials:'omit',
-      headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'setitem', ...p, value:v})});
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'setitem', ...p, value:v, editor:editorLabel()})});
     const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'getitem', p:JSON.stringify(p)}));
     if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการแก้ไข กรุณาอัปเดตสคริปต์');
     if(norm(out.value) !== norm(v)) throw new Error('ข้อมูลในชีทยังไม่เปลี่ยน (อาจมีคนแก้ช่องนี้พร้อมกัน หรือ Apps Script ยังไม่ได้อัปเดต)');
@@ -1008,7 +1040,7 @@ function renderPresence(out){
     </div>`;
   box.open = wasOpen;
   const key = me ? me.email : null;
-  if(key !== meKey){ meKey = key; renderSignin(); }
+  if(key !== meKey){ meKey = key; renderSignin(); showEditorBtn(); }
 }
 function renderSignin(){
   const box = document.getElementById('signin');
@@ -1144,6 +1176,7 @@ async function checkVersion(){
 }
 document.getElementById('ver').textContent = 'v' + APP_VERSION;
 checkVersion();
+showEditorBtn();
 // ระหว่างเปิดหน้าค้างไว้ ตรวจเวอร์ชันใหม่ทุก 2 นาที (ไม่โหลดใหม่ระหว่างใช้งานตัวกรอง/ดูรูป/อัปโหลด)
 setInterval(()=>{ if(canAutoRefresh()) checkVersion(); }, 120*1000);
 render();

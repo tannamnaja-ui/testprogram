@@ -67,6 +67,15 @@ function doGet(e) {
   return reply(out, prm.callback);
 }
 
+// บันทึกชื่อผู้แก้เป็นโน้ตของช่องนั้น (ล่าสุดอยู่บน เก็บ 10 ครั้งหลังสุด) — ไม่ต้องเพิ่มแท็บใหม่
+function noteEditor(range, editor) {
+  editor = String(editor || '').trim().slice(0, 200) || 'ไม่ระบุชื่อ';
+  const when = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'dd/MM/yyyy HH:mm');
+  const line = 'แก้ไขโดย ' + editor + ' เมื่อ ' + when;
+  const old = String(range.getNote() || '').split('\n').filter(l => l.indexOf('แก้ไขโดย ') === 0);
+  range.setNote([line].concat(old).slice(0, 10).join('\n'));
+}
+
 // ---------- แก้ไขหน้ารายชื่อ ----------
 // แก้ได้เฉพาะแท็บรายชื่อทดสอบโปรแกรม(ประจำสัปดาห์) และเฉพาะคอลัมน์ที่หัวตาราง (แถว 2) ชื่อตามนี้ ทุกสัปดาห์
 const ROSTER_GID = '1921321948';
@@ -161,6 +170,7 @@ function setRosterCell(prm) {
       throw new Error('แถวไม่ถูกต้อง');
     }
     sh.getRange(row, col).setValue(value);
+    noteEditor(sh.getRange(row, col), prm.editor);
     CacheService.getScriptCache().remove('opts:' + ROSTER_GID); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
   } finally {
     lock.releaseLock();
@@ -201,6 +211,7 @@ function setItemCell(p) {
     const c = resolveItemCell(p);
     const value = String(p.value == null ? '' : p.value).slice(0, 40000);
     c.sh.getRange(c.row, c.col).setValue(value);
+    noteEditor(c.sh.getRange(c.row, c.col), p.editor);
     return { ok: true, row: c.row, col: c.col };
   } finally {
     lock.releaseLock();
