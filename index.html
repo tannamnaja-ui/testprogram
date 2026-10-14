@@ -66,6 +66,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
 .m6{--mbg:#fdeaea;--mbd:#f6cccc;--mfg:#a12a2a}
 .m7{--mbg:#eef3e1;--mbd:#d9e5bd;--mfg:#556b1f}
 .m8{--mbg:#fdf6d8;--mbd:#f3e3a0;--mfg:#7a5c00}
+.m9{--mbg:#e9eef5;--mbd:#cdd8e6;--mfg:#2f4b6e}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .m0{--mbg:#232845;--mbd:#313968;--mfg:#b3bdf5}
   :root:not([data-theme="light"]) .m1{--mbg:#1b2a3a;--mbd:#25405a;--mfg:#9ccaf2}
@@ -76,6 +77,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
   :root:not([data-theme="light"]) .m6{--mbg:#3a1f1f;--mbd:#552a2a;--mfg:#f4b3b3}
   :root:not([data-theme="light"]) .m7{--mbg:#262d17;--mbd:#3a4522;--mfg:#cfe39a}
   :root:not([data-theme="light"]) .m8{--mbg:#33290f;--mbd:#4d3e17;--mfg:#f0d48a}
+  :root:not([data-theme="light"]) .m9{--mbg:#1d2633;--mbd:#2b3a4f;--mfg:#b5c9e6}
 }
 main{border-top:3px solid var(--mbd)}
 nav a .n{font-weight:400;font-size:12px;margin-left:4px}
@@ -112,6 +114,15 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 .data tr>:first-child,.card .sum tr>:first-child{border-left:1px solid var(--grid)}
 .data thead th,.card .sum thead th{border-top:1px solid var(--grid)}
 .data thead th{border-bottom:2px solid var(--grid)}
+/* คอลัมน์ที่ตรึงไว้ด้านซ้าย */
+.data .frz{position:sticky;z-index:1}
+.data tbody tr:nth-child(odd) td.frz{background:var(--panel)}
+.data thead th.frz{z-index:3}
+.data .frz-last{box-shadow:3px 0 0 -1px var(--grid)}
+/* หัวเรื่องของหน้ารายชื่อ */
+.caption{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 20px;background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:8px 14px;margin-bottom:8px;flex-shrink:0}
+.caption span{white-space:pre-line;font-weight:600}
+.caption span:first-child{font-size:17px;font-weight:700}
 .tablewrap{border-color:var(--grid)}
 /* หน้าตารางข้อมูล: ตารางเต็มความสูงจอที่เหลือ แถบเลื่อนแนวนอนจึงอยู่ล่างจอเสมอ */
 body.sheet-view{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
@@ -211,15 +222,17 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261012.165502';
+const APP_VERSION = '20261014.104128';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
-// color = เลขสีประจำเมนู (.m0–.m8) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
+// color = เลขสีประจำเมนู (.m0–.m9) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
 const TABS = [
+  // roster = หน้ารายชื่อ (ไม่ใช่รายการทดสอบ): headerRow = แถวหัวตาราง, freezeCols = จำนวนคอลัมน์ซ้ายที่ตรึงไว้ (ตรึงที่ D2)
+  {name:'รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)', gid:'1921321948', roster:true, headerRow:2, freezeCols:3, color:9},
   {name:'สรุป', gid:'750027123', summary:true, color:0},
   {name:'HOSxP V4', gid:'653470496', color:1},
   {name:'ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น)', gid:'1356310016', color:8},
@@ -276,9 +289,15 @@ function parseCSV(text){
 const isDate = s => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test((s||'').trim());
 const norm = s => (s||'').trim();
 
-function buildTable(raw){
+function buildTable(raw, opts={}){
   // จำเลขแถวจริงในชีทไว้ใช้ตอนอัปโหลดรูป
   raw.forEach((r,i)=>{ r.sheetRow = i+1; r.shift = 0; });
+  // แถวก่อนแถวหัวตาราง (เช่น หัวเรื่องของหน้ารายชื่อ) เก็บไว้แสดงเหนือตาราง
+  let caption = [];
+  if(opts.headerRow > 1){
+    caption = raw.slice(0, opts.headerRow-1).flatMap(r=>r.map(norm).filter(Boolean));
+    raw = raw.slice(opts.headerRow-1);
+  }
   raw = raw.filter(r => r.some(c => c.trim()!==''));
   if(!raw.length) return {headers:[], rows:[], meta:[]};
   let headers, body;
@@ -315,7 +334,7 @@ function buildTable(raw){
   const colIdx = headers.map((_,i)=>i).filter(i=>keep[i]); // ตำแหน่งคอลัมน์ก่อนตัด
   headers = headers.filter((_,i)=>keep[i]);
   rows = rows.map(r=>r.filter((_,i)=>keep[i]));
-  return {headers, rows, meta, colIdx};
+  return {headers, rows, meta, colIdx, caption};
 }
 
 // เลขคอลัมน์จริงในชีท (1-based) ของช่อง i ในแถว idx
@@ -354,7 +373,7 @@ async function loadAll(silent=false){
       if(!res.ok) throw new Error('HTTP '+res.status);
       const text = await res.text();
       if(silent && data[t.gid] && data[t.gid].raw===text) return; // ไม่มีการเปลี่ยนแปลง
-      const tbl = buildTable(parseCSV(text));
+      const tbl = buildTable(parseCSV(text), t);
       tbl.f = resolveFields(t, tbl.headers);
       tbl.raw = text;
       data[t.gid] = tbl; changed = true;
@@ -479,6 +498,28 @@ function filterBar(name, items, fl, extra='', countExtra=''){
 }
 
 // ---------- views ----------
+// แถบค้นหาแบบย่อ (หน้ารายชื่อไม่มีกลุ่ม/ประเภท/ผลการทดสอบ)
+function searchBar(fl){
+  return `<div class="filters"><div class="fld"><span class="fldhead"><span>ค้นหา</span><b id="count"></b></span><span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div></div>`;
+}
+// ตรึงคอลัมน์ซ้าย (เหมือนตรึงแนวใน Google Sheet): วัดความกว้างจริงแล้วตั้งตำแหน่ง sticky
+function applyFreeze(){
+  const table = document.querySelector('table.data[data-freeze]');
+  const n = table ? +table.dataset.freeze : 0;
+  if(!n) return;
+  let left = 0;
+  const heads = table.tHead.rows[0].cells;
+  for(let c=0; c<n && c<heads.length; c++){
+    const w = heads[c].getBoundingClientRect().width;
+    for(const row of table.rows){
+      const cell = row.cells[c];
+      if(!cell || cell.colSpan>1) continue;
+      cell.classList.add('frz'); cell.style.left = left + 'px';
+      if(c===n-1) cell.classList.add('frz-last');
+    }
+    left += w;
+  }
+}
 function renderSheet(tab){
   const t = data[tab.gid];
   if(t.error) return `<div class="empty err">โหลดชีท ${esc(tab.name)} ไม่สำเร็จ (${esc(t.error)})</div>`;
@@ -497,8 +538,11 @@ function renderSheet(tab){
       if(i===resCol) return `<td class="w-res">${norm(c) ? `<span class="badge ${resultClass(c)}">${esc(norm(c))}</span>` : ''}</td>`;
       return `<td class="${cls(t.headers[i])}">${linkify(norm(c))}</td>`;
     }).join('')}</tr>`).join('');
-  return filterBar(tab.name, all, fl) +
-    `<div class="tablewrap"><table class="data"><thead><tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
+  const top = tab.roster
+    ? (t.caption.length ? `<div class="caption">${t.caption.map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '') + searchBar(fl)
+    : filterBar(tab.name, all, fl);
+  return top +
+    `<div class="tablewrap"><table class="data" data-freeze="${tab.freezeCols||0}"><thead><tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
      <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
@@ -542,7 +586,7 @@ function card(id, cls, title, html){
 
 function renderSummary(tab){
   const fl = getFilter(tab.name);
-  const sources = TABS.filter(t=>!t.summary);
+  const sources = TABS.filter(t=>!t.summary && !t.roster);
   const gids = fl.src==='all' ? sources.map(t=>t.gid) : fl.src==='xe' ? XE_GIDS : [fl.src];
   // หน้าสรุปจัดผลการทดสอบเป็น 4 กลุ่ม (ค่าอื่นนับเป็นรอทดสอบ)
   const all = gids.flatMap(toItems).map(i=>({...i, result:resultBucket(i.result)}));
@@ -837,6 +881,7 @@ function render(){
   if(!loadedAt){ main.innerHTML = '<div class="empty">กำลังโหลดข้อมูลจาก Google Sheet…</div>'; return; }
   document.body.classList.toggle('sheet-view', !tab.summary);
   main.innerHTML = tab.summary ? renderSummary(tab) : renderSheet(tab);
+  applyFreeze();
   const meta = main.querySelector('script[type=x]');
   if(meta){ const [a,b]=meta.textContent.split('/'); document.getElementById('count').textContent = `แสดง ${a} จาก ${b} รายการ`; }
 }
