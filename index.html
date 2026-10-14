@@ -119,10 +119,10 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 .data tbody tr:nth-child(odd) td.frz{background:var(--panel)}
 .data thead th.frz{z-index:3}
 .data .frz-last{box-shadow:3px 0 0 -1px var(--grid)}
-/* หัวเรื่องของหน้ารายชื่อ */
-.caption{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 20px;background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:8px 14px;margin-bottom:8px;flex-shrink:0}
-.caption span{white-space:pre-line;font-weight:600}
-.caption span:first-child{font-size:17px;font-weight:700}
+/* หน้ารายชื่อ: ตารางกว้างพอดีข้อความ และหัวตารางชั้นบน (หัวสัปดาห์) */
+table.data.fit{width:auto}
+.data.fit th{white-space:pre-line}
+.data th.top{text-align:center;vertical-align:middle;font-weight:700}
 .tablewrap{border-color:var(--grid)}
 /* หน้าตารางข้อมูล: ตารางเต็มความสูงจอที่เหลือ แถบเลื่อนแนวนอนจึงอยู่ล่างจอเสมอ */
 body.sheet-view{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
@@ -222,7 +222,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.104128';
+const APP_VERSION = '20261014.115811';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -293,9 +293,10 @@ function buildTable(raw, opts={}){
   // จำเลขแถวจริงในชีทไว้ใช้ตอนอัปโหลดรูป
   raw.forEach((r,i)=>{ r.sheetRow = i+1; r.shift = 0; });
   // แถวก่อนแถวหัวตาราง (เช่น หัวเรื่องของหน้ารายชื่อ) เก็บไว้แสดงเหนือตาราง
-  let caption = [];
+  // แถวก่อนแถวหัวตาราง (เช่น หัวสัปดาห์ของหน้ารายชื่อ) ใช้เป็นหัวตารางชั้นบน ตามตำแหน่งคอลัมน์
+  let top = null;
   if(opts.headerRow > 1){
-    caption = raw.slice(0, opts.headerRow-1).flatMap(r=>r.map(norm).filter(Boolean));
+    top = raw[opts.headerRow-2].map(norm);
     raw = raw.slice(opts.headerRow-1);
   }
   raw = raw.filter(r => r.some(c => c.trim()!==''));
@@ -334,7 +335,7 @@ function buildTable(raw, opts={}){
   const colIdx = headers.map((_,i)=>i).filter(i=>keep[i]); // ตำแหน่งคอลัมน์ก่อนตัด
   headers = headers.filter((_,i)=>keep[i]);
   rows = rows.map(r=>r.filter((_,i)=>keep[i]));
-  return {headers, rows, meta, colIdx, caption};
+  return {headers, rows, meta, colIdx, top};
 }
 
 // เลขคอลัมน์จริงในชีท (1-based) ของช่อง i ในแถว idx
@@ -505,19 +506,23 @@ function searchBar(fl){
 // ตรึงคอลัมน์ซ้าย (เหมือนตรึงแนวใน Google Sheet): วัดความกว้างจริงแล้วตั้งตำแหน่ง sticky
 function applyFreeze(){
   const table = document.querySelector('table.data[data-freeze]');
-  const n = table ? +table.dataset.freeze : 0;
+  if(!table) return;
+  const hr = table.tHead.rows;
+  // หัวตารางชั้นที่ 2 ค้างอยู่ใต้ชั้นแรก
+  if(hr.length > 1){ const h = hr[0].getBoundingClientRect().height; for(const th of hr[hr.length-1].cells) th.style.top = h + 'px'; }
+  const n = +table.dataset.freeze;
   if(!n) return;
-  let left = 0;
-  const heads = table.tHead.rows[0].cells;
-  for(let c=0; c<n && c<heads.length; c++){
-    const w = heads[c].getBoundingClientRect().width;
-    for(const row of table.rows){
-      const cell = row.cells[c];
-      if(!cell || cell.colSpan>1) continue;
-      cell.classList.add('frz'); cell.style.left = left + 'px';
-      if(c===n-1) cell.classList.add('frz-last');
+  const last = hr[hr.length-1].cells, offs = [0];
+  for(let c=0; c<n && c<last.length; c++) offs.push(offs[c] + last[c].getBoundingClientRect().width);
+  for(const row of table.rows){
+    let col = 0;
+    for(const cell of row.cells){
+      const span = cell.colSpan || 1;
+      if(col + span > n) break;
+      cell.classList.add('frz'); cell.style.left = offs[col] + 'px';
+      if(col + span === n) cell.classList.add('frz-last');
+      col += span;
     }
-    left += w;
   }
 }
 function renderSheet(tab){
@@ -536,13 +541,22 @@ function renderSheet(tab){
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
       if(i===resCol) return `<td class="w-res">${norm(c) ? `<span class="badge ${resultClass(c)}">${esc(norm(c))}</span>` : ''}</td>`;
-      return `<td class="${cls(t.headers[i])}">${linkify(norm(c))}</td>`;
+      return `<td class="${tab.roster ? '' : cls(t.headers[i])}">${linkify(norm(c))}</td>`;
     }).join('')}</tr>`).join('');
-  const top = tab.roster
-    ? (t.caption.length ? `<div class="caption">${t.caption.map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '') + searchBar(fl)
-    : filterBar(tab.name, all, fl);
-  return top +
-    `<div class="tablewrap"><table class="data" data-freeze="${tab.freezeCols||0}"><thead><tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
+  // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
+  let topRow = '';
+  if(t.top){
+    const label = i => t.top[t.colIdx[i]] || '';
+    for(let k=0; k<order.length;){
+      let span = 1;
+      while(k+span<order.length && !label(order[k+span]) && k+span!==tab.freezeCols) span++;
+      topRow += `<th colspan="${span}" class="top">${esc(label(order[k]))}</th>`;
+      k += span;
+    }
+    topRow = `<tr>${topRow}</tr>`;
+  }
+  return (tab.roster ? searchBar(fl) : filterBar(tab.name, all, fl)) +
+    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
      <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
