@@ -123,6 +123,12 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 table.data.fit{width:auto}
 .data.fit th{white-space:pre-line}
 .data th.top{text-align:center;vertical-align:middle;font-weight:700}
+.data td.edit{padding:3px 4px}
+.cell-in{font:inherit;font-size:14px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--text)}
+.cell-in:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+.cell-in.saving{border-color:#d4a017;background:#fff8e1}
+.cell-in.saved{border-color:#2e9e5b}
+.cell-in.failed{border-color:var(--bad);background:var(--bad-bg)}
 .tablewrap{border-color:var(--grid)}
 /* หน้าตารางข้อมูล: ตารางเต็มความสูงจอที่เหลือ แถบเลื่อนแนวนอนจึงอยู่ล่างจอเสมอ */
 body.sheet-view{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
@@ -222,7 +228,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.115811';
+const APP_VERSION = '20261014.124040';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -499,6 +505,36 @@ function filterBar(name, items, fl, extra='', countExtra=''){
 }
 
 // ---------- views ----------
+// ---------- แก้ไขหน้ารายชื่อ (บันทึกลง Google Sheet ผ่าน Apps Script) ----------
+const ROSTER_EDITABLE = ['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'];
+// รายการคำที่เคยกรอกในคอลัมน์ชื่อเดียวกัน (ทุกสัปดาห์) ไว้ให้เลือกตอนพิมพ์
+function rosterLists(t, order){
+  return order.filter(i=>ROSTER_EDITABLE.includes(t.headers[i])).map(i=>{
+    const vals = new Set();
+    t.headers.forEach((h,j)=>{ if(h===t.headers[i]) t.rows.forEach(r=>{ const v = norm(r[j]); if(v) vals.add(v); }); });
+    return `<datalist id="dl-${i}">${[...vals].sort((a,b)=>a.localeCompare(b,'th')).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
+  }).join('');
+}
+async function saveRosterCell(inp){
+  const [gid, idxStr, colStr] = inp.dataset.edit.split(':'); const idx = +idxStr, i = +colStr;
+  const t = data[gid], value = inp.value.trim();
+  if(value === norm(t.rows[idx][i])) return;
+  if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่า Apps Script'); return; }
+  const nameCol = t.headers.findIndex(h=>/ชื่อ-นามสกุล/.test(h));
+  inp.classList.remove('saved','failed'); inp.classList.add('saving');
+  try{
+    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'setcell', row:t.meta[idx].sheetRow, col:sheetCol(t, idx, i),
+      value, ncol: nameCol>=0 ? sheetCol(t, idx, nameCol) : '', name: nameCol>=0 ? norm(t.rows[idx][nameCol]) : ''}));
+    if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการบันทึก กรุณาอัปเดตสคริปต์');
+    t.rows[idx][i] = value; t.meta[idx].sheetRow = out.row;
+    inp.classList.remove('saving'); inp.classList.add('saved');
+    document.getElementById('status').textContent = 'บันทึกลง Google Sheet แล้ว · ' + new Date().toLocaleTimeString('th-TH');
+  }catch(e){
+    inp.classList.remove('saving'); inp.classList.add('failed');
+    alert('บันทึกไม่สำเร็จ: ' + e.message);
+  }
+}
+
 // แถบค้นหาแบบย่อ (หน้ารายชื่อไม่มีกลุ่ม/ประเภท/ผลการทดสอบ)
 function searchBar(fl){
   return `<div class="filters"><div class="fld"><span class="fldhead"><span>ค้นหา</span><b id="count"></b></span><span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div></div>`;
@@ -541,6 +577,8 @@ function renderSheet(tab){
   const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
       if(i===resCol) return `<td class="w-res">${norm(c) ? `<span class="badge ${resultClass(c)}">${esc(norm(c))}</span>` : ''}</td>`;
+      if(tab.roster && ROSTER_EDITABLE.includes(t.headers[i]))
+        return `<td class="edit"><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
       return `<td class="${tab.roster ? '' : cls(t.headers[i])}">${linkify(norm(c))}</td>`;
     }).join('')}</tr>`).join('');
   // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
@@ -557,7 +595,7 @@ function renderSheet(tab){
   }
   return (tab.roster ? searchBar(fl) : filterBar(tab.name, all, fl)) +
     `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}</tr></thead>
-     <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>
+     <tbody>${body || `<tr><td colspan="${order.length}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>${tab.roster ? rosterLists(t, order) : ''}
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
 
@@ -901,6 +939,7 @@ function render(){
 }
 
 document.getElementById('main').addEventListener('change', e=>{
+  if(e.target.dataset.edit){ saveRosterCell(e.target); return; }
   const pick = e.target.dataset.cardpick;
   if(pick){
     pickedCards = pickedCards.filter(x=>x!==pick);
@@ -912,6 +951,9 @@ document.getElementById('main').addEventListener('change', e=>{
   const fl = getFilter(currentTab().name); fl[k] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(k==='src'){ fl.group=fl.type=fl.result=fl.tester=''; }
   render();
+});
+document.getElementById('main').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.dataset.edit) e.target.blur();
 });
 let qTimer;
 document.getElementById('main').addEventListener('input', e=>{

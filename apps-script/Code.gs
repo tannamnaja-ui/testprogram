@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเก
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'delete') {
+  if (prm.action === 'setcell') {
+    try { out = setRosterCell(prm); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'delete') {
     try { out = deleteImage(prm); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'ping' || prm.action === 'leave') {
@@ -56,6 +59,45 @@ function doGet(e) {
     out = { ok: true, message: 'upload service is running' };
   }
   return reply(out, prm.callback);
+}
+
+// ---------- แก้ไขหน้ารายชื่อ ----------
+// แก้ได้เฉพาะแท็บรายชื่อทดสอบโปรแกรม(ประจำสัปดาห์) และเฉพาะคอลัมน์ที่หัวตาราง (แถว 2) ชื่อตามนี้ ทุกสัปดาห์
+const ROSTER_GID = '1921321948';
+const ROSTER_HEADER_ROW = 2;
+const ROSTER_EDITABLE = ['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'];
+
+function setRosterCell(prm) {
+  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+    .find(s => String(s.getSheetId()) === ROSTER_GID);
+  if (!sh) throw new Error('ไม่พบแท็บรายชื่อ');
+  const col = Number(prm.col);
+  let row = Number(prm.row);
+  if (!(col >= 1 && col <= sh.getLastColumn())) throw new Error('คอลัมน์ไม่ถูกต้อง');
+  const header = String(sh.getRange(ROSTER_HEADER_ROW, col).getDisplayValue()).trim();
+  if (ROSTER_EDITABLE.indexOf(header) < 0) throw new Error('แก้ได้เฉพาะคอลัมน์ ' + ROSTER_EDITABLE.join(', '));
+  const value = String(prm.value || '').slice(0, 1000);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // ตรวจว่าแถวยังเป็นคนเดิม (ถ้ามีการแทรก/ลบแถว ให้ค้นจากชื่อ)
+    const ncol = Number(prm.ncol), name = String(prm.name || '').trim();
+    if (ncol >= 1 && name) {
+      const at = r => r > ROSTER_HEADER_ROW && r <= sh.getLastRow() && String(sh.getRange(r, ncol).getDisplayValue()).trim() === name;
+      if (!at(row)) {
+        const names = sh.getRange(1, ncol, sh.getLastRow(), 1).getDisplayValues();
+        row = names.findIndex((v, i) => i >= ROSTER_HEADER_ROW && String(v[0]).trim() === name) + 1;
+        if (row < 1) throw new Error('ไม่พบชื่อ ' + name + ' ในชีท กรุณาโหลดข้อมูลใหม่');
+      }
+    } else if (!(row > ROSTER_HEADER_ROW)) {
+      throw new Error('แถวไม่ถูกต้อง');
+    }
+    sh.getRange(row, col).setValue(value);
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true, row, col, value };
 }
 
 // ---------- ลบรูป ----------
