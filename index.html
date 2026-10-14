@@ -123,6 +123,8 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 table.data.fit{width:auto}
 .data.fit th{white-space:pre-line}
 .data th.top{text-align:center;vertical-align:middle;font-weight:700}
+.data th.top .top-red{display:block;color:#d61f1f}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .data th.top .top-red{color:#ff7b72}}
 .roster-note{align-self:flex-end;flex:1 1 360px;background:#fff6d6;color:#5c4400;border:1px solid #f0d77a;border-radius:6px;padding:6px 10px;font-size:14px;font-weight:600;line-height:1.5}
 .roster-note a{color:#1d6fb8;word-break:break-all}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .roster-note{background:#3a2f12;color:#f3dc9a;border-color:#5c4a1d}:root:not([data-theme="light"]) .roster-note a{color:#7fb8ee}}
@@ -253,7 +255,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.144425';
+const APP_VERSION = '20261014.161422';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -778,7 +780,9 @@ function renderSheet(tab){
     for(let k=0; k<order.length;){
       let span = 1;
       while(k+span<order.length && !label(order[k+span]) && k+span!==tab.freezeCols) span++;
-      topRow += `<th colspan="${span}" class="top">${esc(label(order[k]))}</th>`;
+      // บรรทัดที่ 2 เป็นต้นไปของหัวสัปดาห์ (เช่น วันประชุม) เป็นสีแดง
+      const [first, ...rest] = label(order[k]).split('\n');
+      topRow += `<th colspan="${span}" class="top">${esc(first)}${rest.map(l=>`<span class="top-red">${esc(l)}</span>`).join('')}</th>`;
       k += span;
     }
     topRow = `<tr>${topRow}</tr>`;
