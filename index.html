@@ -228,7 +228,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.124040';
+const APP_VERSION = '20261014.124216';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
@@ -523,8 +523,11 @@ async function saveRosterCell(inp){
   const nameCol = t.headers.findIndex(h=>/ชื่อ-นามสกุล/.test(h));
   inp.classList.remove('saved','failed'); inp.classList.add('saving');
   try{
+    // หัวสัปดาห์ของคอลัมน์นี้ (ข้อความในแถว 1 ที่ใกล้ที่สุดทางซ้าย) ให้สคริปต์ตรวจว่าบันทึกถูกสัปดาห์
+    let week = '';
+    for(let k=t.colIdx[i]; k>=0 && !week; k--) week = (t.top && t.top[k]) || '';
     const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'setcell', row:t.meta[idx].sheetRow, col:sheetCol(t, idx, i),
-      value, ncol: nameCol>=0 ? sheetCol(t, idx, nameCol) : '', name: nameCol>=0 ? norm(t.rows[idx][nameCol]) : ''}));
+      header:t.headers[i], week, value, ncol: nameCol>=0 ? sheetCol(t, idx, nameCol) : '', name: nameCol>=0 ? norm(t.rows[idx][nameCol]) : ''}));
     if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการบันทึก กรุณาอัปเดตสคริปต์');
     t.rows[idx][i] = value; t.meta[idx].sheetRow = out.row;
     inp.classList.remove('saving'); inp.classList.add('saved');

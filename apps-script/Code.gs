@@ -71,16 +71,29 @@ function setRosterCell(prm) {
   const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
     .find(s => String(s.getSheetId()) === ROSTER_GID);
   if (!sh) throw new Error('ไม่พบแท็บรายชื่อ');
-  const col = Number(prm.col);
+  let col = Number(prm.col);
   let row = Number(prm.row);
   if (!(col >= 1 && col <= sh.getLastColumn())) throw new Error('คอลัมน์ไม่ถูกต้อง');
-  const header = String(sh.getRange(ROSTER_HEADER_ROW, col).getDisplayValue()).trim();
-  if (ROSTER_EDITABLE.indexOf(header) < 0) throw new Error('แก้ได้เฉพาะคอลัมน์ ' + ROSTER_EDITABLE.join(', '));
   const value = String(prm.value || '').slice(0, 1000);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
+    // หัวตาราง 2 ชั้น: แถว 1 = หัวสัปดาห์ (ผสานเซลล์ = ช่องว่างต่อจากข้อความ), แถว 2 = ชื่อคอลัมน์
+    const lastCol = sh.getLastColumn();
+    const heads = sh.getRange(1, 1, ROSTER_HEADER_ROW, lastCol).getDisplayValues();
+    const weekOf = c => { for (let k = c - 1; k >= 0; k--) { const v = String(heads[0][k]).trim(); if (v) return v; } return ''; };
+    const nameOf = c => String(heads[ROSTER_HEADER_ROW - 1][c - 1]).trim();
+    const header = String(prm.header || nameOf(col)).trim();
+    if (ROSTER_EDITABLE.indexOf(header) < 0) throw new Error('แก้ได้เฉพาะคอลัมน์ ' + ROSTER_EDITABLE.join(', '));
+    // คอลัมน์ชื่อซ้ำกันได้ในแต่ละสัปดาห์: ต้องตรงทั้งชื่อคอลัมน์และหัวสัปดาห์ ถ้าคอลัมน์เลื่อน ให้ค้นหาใหม่
+    const week = String(prm.week || '').trim();
+    const ok = c => nameOf(c) === header && (!week || weekOf(c) === week);
+    if (!ok(col)) {
+      col = 0;
+      for (let c = 1; c <= lastCol; c++) if (ok(c)) { col = c; break; }
+      if (!col) throw new Error('ไม่พบคอลัมน์ ' + header + (week ? ' ของ ' + week.split('\n')[0] : '') + ' กรุณาโหลดข้อมูลใหม่');
+    }
     // ตรวจว่าแถวยังเป็นคนเดิม (ถ้ามีการแทรก/ลบแถว ให้ค้นจากชื่อ)
     const ncol = Number(prm.ncol), name = String(prm.name || '').trim();
     if (ncol >= 1 && name) {
