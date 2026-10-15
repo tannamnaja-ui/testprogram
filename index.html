@@ -124,6 +124,8 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 /* หน้ารายชื่อ: ตารางกว้างพอดีข้อความ และหัวตารางชั้นบน (หัวสัปดาห์) */
 table.data.fit{width:auto}
 .data.fit th{white-space:pre-line}
+.data.fit td{white-space:nowrap} /* หน้ารายชื่อ: ช่องกว้างพอดีกับข้อความ ไม่ตัดบรรทัด */
+.data.fit .cell-sel{min-width:0}
 .data th.top{text-align:center;vertical-align:middle;font-weight:700}
 .data th.top .top-red{display:block;color:#d61f1f}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .data th.top .top-red{color:#ff7b72}}
@@ -257,7 +259,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.113720';
+const APP_VERSION = '20261015.114024';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -629,10 +631,12 @@ function optColor(v, gid){
 function rosterSelect(gid, idx, i, value){
   const t = data[gid], list = tabOpts(gid).cols[sheetCol(t, idx, i)].slice();
   if(value && !list.includes(value)) list.unshift(value);
-  const c = optColor(value, gid);
+  // ช่องที่ยังว่าง: ตั้งต้นที่ตัวเลือก "ยังไม่…" (เช่น ยังไม่ได้ส่ง) ถ้ามีในรายการ
+  const initial = value || list.find(v=>/^ยังไม่/.test(v)) || '';
+  const c = optColor(initial, gid);
   return `<select class="cell-sel" data-edit="${gid}:${idx}:${i}"${c ? ` style="background:${c.bg};color:${c.fg}"` : ''}>
-    <option value=""></option>${list.map(v=>{ const oc = optColor(v, gid);
-      return `<option value="${esc(v)}" style="background:${oc.bg};color:${oc.fg}"${v===value?' selected':''}>${esc(v)}</option>`; }).join('')}</select>`;
+    ${initial ? '' : '<option value=""></option>'}${list.map(v=>{ const oc = optColor(v, gid);
+      return `<option value="${esc(v)}" style="background:${oc.bg};color:${oc.fg}"${v===initial?' selected':''}>${esc(v)}</option>`; }).join('')}</select>`;
 }
 function paintSelect(sel){
   const c = optColor(sel.value, (sel.dataset.edit||'').split(':')[0]);
