@@ -35,7 +35,7 @@ function doGet(e) {
     try { out = sheetStyle(prm.gid); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'notes') {
-    try { out = editHistory(prm.gid); }
+    try { out = editHistory(prm.gid, Number(prm.since || 0)); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'getitem') {
     try { out = getItemCell(JSON.parse(prm.p || '{}')); }
@@ -102,16 +102,84 @@ function imageIndex(rebuild) {
 }
 
 // บันทึกชื่อผู้แก้เป็นโน้ตของช่องนั้น (ล่าสุดอยู่บน เก็บ 10 ครั้งหลังสุด) — ไม่ต้องเพิ่มแท็บใหม่
-function noteEditor(range, editor) {
+function noteEditor(range, editor, header) {
   editor = String(editor || '').trim().slice(0, 200) || 'ไม่ระบุชื่อ';
-  const when = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'dd/MM/yyyy HH:mm');
+  const now = new Date();
+  const when = Utilities.formatDate(now, 'Asia/Bangkok', 'dd/MM/yyyy HH:mm');
   const line = 'แก้ไขโดย ' + editor + ' เมื่อ ' + when;
   const old = String(range.getNote() || '').split('\n').filter(l => l.indexOf('แก้ไขโดย ') === 0);
   range.setNote([line].concat(old).slice(0, 10).join('\n'));
+  // ไฟล์ประวัติ (อ่านเร็ว ไม่ต้องอ่านโน้ตทุกช่อง) — ผู้เรียกถือ lock อยู่แล้ว
+  try {
+    const gid = String(range.getSheet().getSheetId()), row = String(range.getRow());
+    const h = histRead();
+    const tab = h[gid] = h[gid] || {};
+    const r = tab[row] = tab[row] || { u: 0, e: [] };
+    r.e.unshift({ who: editor, when, ts: now.getTime(), col: String(header || '') });
+    r.e = r.e.slice(0, 20);
+    r.u = now.getTime();
+    histWrite(h);
+  } catch (err) { /* โน้ตในช่องยังมีอยู่ */ }
+}
+
+// ---------- ไฟล์ประวัติผู้แก้ไข (JSON ไฟล์เดียวในโฟลเดอร์รูป) ----------
+// { gid: { แถว: { u: เวลาแก้ล่าสุด, e: [{who, when, ts, col}] } }, _built: { gid: 1 } }
+function histFile() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('hist_file_id');
+  if (id) { try { return DriveApp.getFileById(id); } catch (err) { /* ถูกลบ สร้างใหม่ */ } }
+  const f = getFolder().createFile('edit-history.json', '{}', 'application/json');
+  props.setProperty('hist_file_id', f.getId());
+  return f;
+}
+function histRead() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('hist');
+  if (hit) return JSON.parse(hit);
+  const text = histFile().getBlob().getDataAsString() || '{}';
+  try { cache.put('hist', text, 300); } catch (err) { /* ใหญ่เกิน cache */ }
+  return JSON.parse(text);
+}
+function histWrite(h) {
+  const text = JSON.stringify(h);
+  histFile().setContent(text);
+  try { CacheService.getScriptCache().put('hist', text, 300); } catch (err) { CacheService.getScriptCache().remove('hist'); }
 }
 
 // ประวัติผู้แก้ไขของทุกแถวในแท็บ (อ่านจากโน้ตของแต่ละช่อง) ล่าสุดอยู่บน
-function editHistory(gid) {
+// since = เวลาที่หน้าเว็บโหลดครั้งก่อน: ส่งกลับเฉพาะแถวที่มีการแก้หลังจากนั้น
+function editHistory(gid, since) {
+  gid = String(gid);
+  let h = histRead();
+  if (!(h._built && h._built[gid])) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      h = histRead();
+      if (!(h._built && h._built[gid])) {
+        const old = notesFromSheet(gid).rows;
+        const tab = h[gid] = h[gid] || {};
+        for (const r in old) {
+          const cur = tab[r] = tab[r] || { u: 0, e: [] };
+          const seen = new Set(cur.e.map(x => x.ts + '|' + x.col + '|' + x.who));
+          old[r].forEach(x => { if (!seen.has(x.ts + '|' + x.col + '|' + x.who)) cur.e.push(x); });
+          cur.e.sort((a, b) => b.ts - a.ts); cur.e = cur.e.slice(0, 20);
+          cur.u = Math.max(cur.u, cur.e.length ? cur.e[0].ts : 0);
+        }
+        h._built = h._built || {}; h._built[gid] = 1;
+        histWrite(h);
+      }
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  const rows = {}, tab = h[gid] || {};
+  for (const r in tab) if (tab[r].u > (since || 0)) rows[r] = tab[r].e;
+  return { ok: true, rows, now: Date.now() };
+}
+
+// อ่านประวัติจากโน้ตของทุกช่องในแท็บ (ใช้ครั้งเดียวตอนย้ายข้อมูลเดิม เพราะช้า)
+function notesFromSheet(gid) {
   const cache = CacheService.getScriptCache(), ckey = 'notes:' + gid;
   const hit = cache.get(ckey);
   if (hit) return JSON.parse(hit);
@@ -129,7 +197,7 @@ function editHistory(gid) {
       const m = line.trim().match(re);
       if (!m) return;
       (rows[i + 1] = rows[i + 1] || []).push({ who: m[1], when: m[2] + '/' + m[3] + '/' + m[4] + ' ' + m[5] + ':' + m[6],
-        ts: Date.UTC(+m[4], +m[3] - 1, +m[2], +m[5], +m[6]), col: heads[j] || '' });
+        ts: Date.UTC(+m[4], +m[3] - 1, +m[2], +m[5], +m[6]) - 7 * 3600 * 1000, col: heads[j] || '' });
     });
   }));
   for (const k in rows) rows[k].sort((a, b) => b.ts - a.ts);
@@ -257,7 +325,7 @@ function setRosterCell(prm) {
       throw new Error('แถวไม่ถูกต้อง');
     }
     sh.getRange(row, col).setValue(value);
-    noteEditor(sh.getRange(row, col), prm.editor);
+    noteEditor(sh.getRange(row, col), prm.editor, header);
     CacheService.getScriptCache().removeAll(['opts:' + gid, 'notes:' + gid]);
   } finally {
     lock.releaseLock();
@@ -298,7 +366,7 @@ function setItemCell(p) {
     const c = resolveItemCell(p);
     const value = String(p.value == null ? '' : p.value).slice(0, 40000);
     c.sh.getRange(c.row, c.col).setValue(value);
-    noteEditor(c.sh.getRange(c.row, c.col), p.editor);
+    noteEditor(c.sh.getRange(c.row, c.col), p.editor, p.header);
     CacheService.getScriptCache().remove('notes:' + p.gid);
     return { ok: true, row: c.row, col: c.col };
   } finally {

@@ -259,7 +259,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.120353';
+const APP_VERSION = '20261015.120837';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -418,6 +418,7 @@ async function loadAll(silent=false){
       tbl.f = resolveFields(t, tbl.headers);
       tbl.raw = text;
       data[t.gid] = tbl; changed = true;
+      if(!silent && !loadedAt && currentTab()===t){ loadedAt = new Date(); render(); loadedAt = null; }
     }catch(e){
       if(silent && data[t.gid] && !data[t.gid].error) return; // อัปเดตอัตโนมัติพลาด: ใช้ข้อมูลเดิมต่อ
       data[t.gid] = {error:e.message, headers:[], rows:[], f:{}}; changed = true;
@@ -425,8 +426,9 @@ async function loadAll(silent=false){
   }));
   loadedAt = new Date();
   ensureOpts(currentTab());
-  if(!silent || ++refreshCount % 4 === 0){
-    loadDriveList().then(()=>silent ? softRender() : render()).catch(e=>console.warn('รายการรูป:', e.message));
+  // รายการรูปโหลดเมื่อกด "ดูรูป" หรือติ๊ก "มีรูป" (ไม่โหลดตอนเปิดหน้า เพื่อให้หน้าเร็วขึ้น)
+  if(silent && driveLoadedAt && ++refreshCount % 4 === 0){
+    loadDriveList().then(()=>softRender()).catch(e=>console.warn('รายการรูป:', e.message));
   }
   const errs = TABS.filter(t=>data[t.gid]?.error);
   st.textContent = 'อัปเดต google sheet ล่าสุด ' + loadedAt.toLocaleString('th-TH') + (errs.length ? ` · โหลดไม่สำเร็จ: ${errs.map(t=>t.name).join(', ')}` : '');
@@ -576,11 +578,14 @@ async function chipColors(gid){
   return colors;
 }
 // ประวัติผู้แก้ไขของแต่ละแถว (จากโน้ตของช่องในชีท): historyByGid[gid][เลขแถวในชีท] = [{who, when, col}] ล่าสุดอยู่บน
-const historyByGid = {};
+const historyByGid = {}, historySince = {};
 async function loadHistory(gid){
   if(!UPLOAD_URL) return;
-  const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'notes', gid}));
-  if(out.ok && out.rows) historyByGid[gid] = out.rows;
+  const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'notes', gid, since: historySince[gid] || 0}));
+  if(!(out.ok && out.rows)) return;
+  // ครั้งแรกได้ทั้งหมด ครั้งต่อไปได้เฉพาะแถวที่มีการแก้ แล้วรวมกับของเดิม
+  Object.assign(historyByGid[gid] ||= {}, out.rows);
+  if(out.now) historySince[gid] = out.now - 5000;
 }
 function historyCell(gid, idx){
   const list = (historyByGid[gid] || {})[data[gid].meta[idx].sheetRow] || [];
@@ -995,6 +1000,7 @@ function jsonp(url){
     document.head.appendChild(s);
   });
 }
+let driveLoadedAt = 0;
 async function loadDriveList(){
   if(!UPLOAD_URL) return;
   const out = await jsonp(UPLOAD_URL + '?action=list');
@@ -1002,13 +1008,19 @@ async function loadDriveList(){
   const map = {};
   for(const f of out.files) (map[f.key] ||= []).push(f);
   driveFiles = map;
+  driveLoadedAt = Date.now();
+}
+// โหลดรายการรูปถ้ายังไม่เคยโหลด หรือโหลดไว้นานเกิน 2 นาที
+async function ensureDriveList(){
+  if(!driveLoadedAt || Date.now() - driveLoadedAt > 120000) await loadDriveList();
 }
 function imageCell(gid, idx){
   // แสดงเฉพาะปุ่ม ไม่แสดงข้อความเดิมในช่อง (ลิงก์ในช่องยังเปิดได้จากปุ่มดูรูป)
   const {urls} = rowMedia(gid, idx);
   const key = `${gid}:${idx}`;
   return `<td class="w-img"><div class="imgcell">
-    ${urls.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${urls.length})</button>` : ''}
+    ${urls.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${urls.length})</button>`
+      : !driveLoadedAt && UPLOAD_URL ? `<button class="btn-sm" data-view="${key}" title="กดเพื่อโหลดรูปของข้อนี้">ดูรูป</button>` : ''}
     <button class="btn-sm" data-up="${key}">อัปโหลด</button></div></td>`;
 }
 
@@ -1217,6 +1229,7 @@ document.getElementById('main').addEventListener('change', e=>{
   }
   const k = e.target.dataset.k; if(!k || k==='q') return;
   const fl = getFilter(currentTab().name); fl[k] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
+  if(k==='img' && fl.img && !driveLoadedAt){ document.getElementById('count').textContent = 'กำลังโหลดรายการรูป…'; ensureDriveList().finally(render); return; }
   if(k==='src'){ fl.group=fl.type=fl.result=fl.tester=''; }
   render();
 });
@@ -1236,7 +1249,16 @@ document.getElementById('main').addEventListener('click', e=>{
   const cell = e.target.closest('td[data-cell]');
   if(cell && !e.target.closest('a, .ed-input')){ openEditor(cell); return; }
   const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
-  if(v){ const [gid, idx] = v.dataset.view.split(':'); openViewer(rowMedia(gid, +idx).urls, gid, +idx); return; }
+  if(v){
+    const [gid, idx] = v.dataset.view.split(':');
+    v.disabled = true; v.textContent = 'กำลังโหลด…';
+    ensureDriveList().catch(err=>console.warn('รายการรูป:', err.message)).then(()=>{
+      const urls = rowMedia(gid, +idx).urls;
+      softRender();
+      if(urls.length) openViewer(urls, gid, +idx); else alert('ข้อนี้ยังไม่มีรูป');
+    });
+    return;
+  }
   if(u){
     if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่าระบบอัปโหลด\nกรุณาติดตั้ง Apps Script ตามขั้นตอนในไฟล์ apps-script/Code.gs แล้วใส่ URL ในค่า UPLOAD_URL ของ index.html'); return; }
     uploadTarget = u.dataset.up; const inp = document.getElementById('fileInput'); inp.value = ''; inp.click(); return;
