@@ -97,7 +97,7 @@ main{padding:16px}
 .filters .qrow input{min-width:120px}
 .filters .qrow button{padding:4px 10px;white-space:nowrap}
 .filters .imgchk{flex-direction:row;align-items:center;gap:4px;font-size:14px;color:var(--text);white-space:nowrap;cursor:pointer;padding:0 4px}
-.filters .imgchk input{min-width:0;width:auto}
+.filters .imgchk input{min-width:0;width:auto;padding:0;margin:0}
 /* หน้ารายชื่อ: ค้นหา [ช่อง] [ล้าง] แสดง n จาก n รายการ ในแถวเดียว */
 .filters .qline{display:flex;align-items:center;gap:8px;flex:0 0 auto;font-size:14px;color:var(--muted)}
 .filters .qline input{min-width:120px;width:200px}
@@ -111,7 +111,7 @@ main{padding:16px}
   .filters select{min-width:84px;max-width:180px;width:100%}
   .filters input[type=date]{min-width:0;width:128px;padding:5px 4px}
   .filters .qrow{align-items:center}
-  .filters .qrow input{min-width:80px;width:150px}
+  .filters .qrow input[type=search]{min-width:80px;width:150px}
   .filters .fldhead b{font-size:12px}
   .filters .roster-note{flex:1 1 300px;min-width:200px}
 }
@@ -277,7 +277,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.160815';
+const APP_VERSION = '20261015.161317';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
