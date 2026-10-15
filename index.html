@@ -277,7 +277,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.152102';
+const APP_VERSION = '20261015.160815';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -474,7 +474,7 @@ const AUTO_REFRESH_SEC = 30;
 let refreshCount = 0, uploading = false;
 function canAutoRefresh(){
   const a = document.activeElement;
-  return !document.hidden && !uploading && !editing && document.getElementById('viewer').hidden
+  return !document.hidden && !uploading && !editing && !savesInFlight && document.getElementById('viewer').hidden
     && !(a && (a.tagName==='SELECT' || a.tagName==='TEXTAREA' || (a.tagName==='INPUT' && a.type!=='checkbox')));
 }
 // วาดใหม่โดยคงตำแหน่งเลื่อนหน้าจอไว้
@@ -745,7 +745,7 @@ document.getElementById('editorBtn').addEventListener('click', ()=>{ askEditorNa
 // แก้ได้เฉพาะคอลัมน์ที่หัวตารางขึ้นต้นด้วยชื่อเหล่านี้ และเฉพาะชีทที่มีแถวหัวตารางในแถว 1
 const ITEM_EDITABLE = ['ระบบงาน', 'ปัญหาที่พบ', 'สิ่งที่แก้ไข', 'วิธีตรวจสอบ', 'ผลการทดสอบ', 'หมายเหตุ'];
 const canEditItem = (tab, t, i) => !!UPLOAD_URL && !tab.roster && !tab.summary && t.sheetHeader && ITEM_EDITABLE.some(x=>t.headers[i].startsWith(x));
-let editing = null;
+let editing = null, savesInFlight = 0;
 function itemCellHtml(t, i, v){
   v = norm(v);
   if(i===t.f.result) return v ? `<span class="badge ${resultClass(v)}">${esc(v)}</span>` : '';
@@ -787,14 +787,26 @@ async function closeEditor(newValue){
   td.innerHTML = itemCellHtml(t, i, v);
   if(newValue==null || v===value){ editing = null; return; }
   td.classList.add('saving');
+  // บันทึกอยู่เบื้องหลัง แก้ช่องอื่นต่อได้เลย (ระหว่างนี้หยุดอัปเดตอัตโนมัติ)
+  editing = null; savesInFlight++;
   const p = {gid, header:t.headers[i], col:sheetCol(t, idx, i), row:t.meta[idx].sheetRow, match:rowMatch(t, idx)};
   try{
-    // ส่งแบบ POST (ข้อความยาวได้) แล้วอ่านค่ากลับจากชีทเพื่อยืนยันว่าบันทึกแล้ว
-    await fetch(UPLOAD_URL, {method:'POST', mode:'no-cors', credentials:'omit',
-      headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'setitem', ...p, value:v, editor:editorLabel()})});
-    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'getitem', p:JSON.stringify(p)}));
-    if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการแก้ไข กรุณาอัปเดตสคริปต์');
-    if(norm(out.value) !== norm(v)) throw new Error('ข้อมูลในชีทยังไม่เปลี่ยน (อาจมีคนแก้ช่องนี้พร้อมกัน หรือ Apps Script ยังไม่ได้อัปเดต)');
+    let out = null;
+    // ข้อความไม่ยาว: ส่งและได้คำตอบในรอบเดียว
+    const q = new URLSearchParams({action:'setitem', p: JSON.stringify({...p, value:v, editor:editorLabel()})}).toString();
+    if(q.length < 6000){
+      out = await jsonp(UPLOAD_URL + '?' + q);
+      if(!out.ok) throw new Error(out.error);
+      if(out.row == null) out = null; // สคริปต์รุ่นเก่ายังไม่รองรับ: ใช้วิธีเดิม
+    }
+    if(!out){
+      // ข้อความยาว: ส่งแบบ POST แล้วอ่านค่ากลับจากชีทเพื่อยืนยันว่าบันทึกแล้ว
+      await fetch(UPLOAD_URL, {method:'POST', mode:'no-cors', credentials:'omit',
+        headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'setitem', ...p, value:v, editor:editorLabel()})});
+      out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'getitem', p:JSON.stringify(p)}));
+      if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการแก้ไข กรุณาอัปเดตสคริปต์');
+      if(norm(out.value) !== norm(v)) throw new Error('ข้อมูลในชีทยังไม่เปลี่ยน (อาจมีคนแก้ช่องนี้พร้อมกัน หรือ Apps Script ยังไม่ได้อัปเดต)');
+    }
     t.rows[idx][i] = v; t.meta[idx].sheetRow = out.row;
     const now = new Date(), two = n => String(n).padStart(2,'0');
     const hist = (historyByGid[gid] ||= {});
@@ -808,8 +820,9 @@ async function closeEditor(newValue){
     td.classList.remove('saving'); td.classList.add('failed');
     td.innerHTML = itemCellHtml(t, i, value);
     alert('บันทึกไม่สำเร็จ: ' + e.message);
+  }finally{
+    savesInFlight--;
   }
-  editing = null;
 }
 
 // แถบค้นหาแบบย่อ (หน้ารายชื่อไม่มีกลุ่ม/ประเภท/ผลการทดสอบ)

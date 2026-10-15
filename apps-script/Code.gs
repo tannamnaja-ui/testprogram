@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 150 * 1000; // ไม่ส่งสัญญาณเ�
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'today') {
+  if (prm.action === 'setitem') {
+    try { out = setItemCell(JSON.parse(prm.p || '{}')); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'today') {
     try { out = todayChanges(String(prm.gids || '').split(',').filter(String)); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'style') {
@@ -112,17 +115,34 @@ function noteEditor(range, editor, header) {
   const line = 'แก้ไขโดย ' + editor + ' เมื่อ ' + when;
   const old = String(range.getNote() || '').split('\n').filter(l => l.indexOf('แก้ไขโดย ') === 0);
   range.setNote([line].concat(old).slice(0, 10).join('\n'));
-  // ไฟล์ประวัติ (อ่านเร็ว ไม่ต้องอ่านโน้ตทุกช่อง) — ผู้เรียกถือ lock อยู่แล้ว
+  // ประวัติ: จดไว้ในรายการรอ (เร็ว) แล้วรวมลงไฟล์ประวัติตอนหน้าเว็บโหลดประวัติ — ผู้เรียกถือ lock อยู่แล้ว
   try {
-    const gid = String(range.getSheet().getSheetId()), row = String(range.getRow());
-    const h = histRead();
+    histPendingAdd(String(range.getSheet().getSheetId()), String(range.getRow()),
+      { who: editor, when, ts: now.getTime(), col: String(header || '') });
+  } catch (err) { /* โน้ตในช่องยังมีอยู่ */ }
+}
+
+// รายการประวัติที่ยังไม่ได้รวมลงไฟล์ (Script Properties จำกัด 9 KB ต่อค่า จึงรวมลงไฟล์เมื่อใกล้เต็ม)
+function histPending() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('hist_pending') || '[]'); } catch (err) { return []; }
+}
+function histPendingAdd(gid, row, entry) {
+  const props = PropertiesService.getScriptProperties();
+  const arr = histPending();
+  arr.push([gid, row, entry]);
+  const text = JSON.stringify(arr);
+  if (text.length > 2500) { histWrite(histMerge(histRead(), arr)); props.deleteProperty('hist_pending'); }
+  else props.setProperty('hist_pending', text);
+}
+function histMerge(h, arr) {
+  arr.forEach(([gid, row, e]) => {
     const tab = h[gid] = h[gid] || {};
     const r = tab[row] = tab[row] || { u: 0, e: [] };
-    r.e.unshift({ who: editor, when, ts: now.getTime(), col: String(header || '') });
-    r.e = r.e.slice(0, 20);
-    r.u = now.getTime();
-    histWrite(h);
-  } catch (err) { /* โน้ตในช่องยังมีอยู่ */ }
+    if (!r.e.some(x => x.ts === e.ts && x.col === e.col && x.who === e.who)) r.e.unshift(e);
+    r.e.sort((a, b) => b.ts - a.ts); r.e = r.e.slice(0, 20);
+    r.u = Math.max(r.u, e.ts);
+  });
+  return h;
 }
 
 // ---------- ผลการทดสอบที่เปลี่ยนวันนี้ ----------
@@ -249,6 +269,20 @@ function editHistory(gid, since) {
       }
     } finally {
       lock.releaseLock();
+    }
+  }
+  const pending = histPending();
+  if (pending.length) {
+    const lock = LockService.getScriptLock();
+    if (lock.tryLock(2000)) {
+      try {
+        const p2 = histPending();
+        h = histMerge(histRead(), p2);
+        histWrite(h);
+        PropertiesService.getScriptProperties().deleteProperty('hist_pending');
+      } finally { lock.releaseLock(); }
+    } else {
+      h = histMerge(JSON.parse(JSON.stringify(h)), pending);
     }
   }
   const rows = {}, tab = h[gid] || {};
