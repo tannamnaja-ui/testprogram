@@ -228,6 +228,7 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .card .sum tbody tr:nth-child(even):not(.total) td{background:var(--zebra)}
 .card .sum tr.total td{background:var(--tint-strong)}
 .card .sum tbody tr:not(.total):hover td{background:var(--accent-soft)}
+.card .sum .r-today{background:#e8f0fe;font-weight:700;color:#1a56b8}
 .card .sum .r-pass{background:var(--pass-bg)}
 .card .sum .r-fail{background:var(--fail-bg)}
 .card .sum .r-na{background:var(--na-bg)}
@@ -276,7 +277,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.143207';
+const APP_VERSION = '20261015.144444';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -887,6 +888,20 @@ function renderSheet(tab){
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
 
+// ---------- ผลการทดสอบที่เปลี่ยนวันนี้ (ใช้ในสรุปตามผู้ทดสอบ) ----------
+const todayByGid = {}; let todayLoadedAt = 0, todayLoading = false;
+const todayChanged = gid => todayByGid[gid] || new Set();
+function ensureToday(gids){
+  if(!UPLOAD_URL || todayLoading || Date.now() - todayLoadedAt < 120000) return;
+  todayLoading = true;
+  const want = TABS.filter(t=>!t.summary && !t.roster).map(t=>t.gid); // โหลดทุกแท็บครั้งเดียว ใช้ได้กับทุกตัวเลือก "ข้อมูลจากชีท"
+  jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'today', gids: want.join(',')})).then(out=>{
+    if(out.ok && out.changed) for(const g in out.changed) todayByGid[g] = new Set(out.changed[g]);
+    todayLoadedAt = Date.now();
+    if(currentTab().summary) softRender();
+  }).catch(e=>console.warn('ทดสอบวันนี้:', e.message)).finally(()=>{ todayLoading = false; });
+}
+
 const RESULT_BUCKETS = [
   {name:'ทดสอบผ่าน', cls:'r-pass'},
   {name:'ทดสอบไม่ผ่าน', cls:'r-fail'},
@@ -966,10 +981,15 @@ function renderSummary(tab){
     <tr class="total"><td>รวมทั้งหมด</td>${resTotal}<td>${items.length}</td></tr></tbody></table>`;
 
   // 3) ผู้ทดสอบ
-  const t4 = `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${testers.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th>${resHead}</tr></thead><tbody>
+  // ทดสอบวันนี้ = ข้อที่ผลการทดสอบเปลี่ยนในวันนี้ (สคริปต์เทียบกับค่าตอนเริ่มวัน)
+  ensureToday(gids);
+  const isToday = i => todayChanged(i.gid).has(norm(data[i.gid].rows[i.idx][data[i.gid].f.title]));
+  const todayKnown = gids.some(g=>todayByGid[g]);
+  const todayCell = arr => todayKnown ? cell(n(arr, isToday), 'r-today') : '<td class="r-today z">…</td>';
+  const t4 = `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${testers.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th><th class="r-today" title="จำนวนข้อที่ผลการทดสอบเปลี่ยนในวันนี้">ทดสอบวันนี้</th>${resHead}</tr></thead><tbody>
     ${testers.map(p=>{ const pi=items.filter(i=>i.tester===p);
-      return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${resCells(pi)}</tr>`; }).join('')}
-    <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${resTotal}</tr></tbody></table>`;
+      return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${todayCell(pi)}${resCells(pi)}</tr>`; }).join('')}
+    <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${todayCell(items)}${resTotal}</tr></tbody></table>`;
 
   return filterBar(tab.name, all, fl, srcSel, cardPicker()) +
     (items.length ? `<div class="cards">

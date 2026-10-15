@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 150 * 1000; // ไม่ส่งสัญญาณเ�
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'style') {
+  if (prm.action === 'today') {
+    try { out = todayChanges(String(prm.gids || '').split(',').filter(String)); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'style') {
     try { out = sheetStyle(prm.gid); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'notes') {
@@ -121,6 +124,66 @@ function noteEditor(range, editor, header) {
     histWrite(h);
   } catch (err) { /* โน้ตในช่องยังมีอยู่ */ }
 }
+
+// ---------- ผลการทดสอบที่เปลี่ยนวันนี้ ----------
+// เก็บผลการทดสอบของทุกข้อไว้ในไฟล์ result-snapshot.json แล้วเทียบกับค่าตอนเริ่มวัน
+// (ค่าล่าสุดที่เห็นก่อนขึ้นวันใหม่) นับทั้งการแก้ผ่านหน้าเว็บและการแก้ในชีทโดยตรง
+// { gid: { day: 'yyyy-MM-dd', base: {หัวข้อ: ผล}, last: {หัวข้อ: ผล} } }
+function todayChanges(gids) {
+  const today = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+  const cache = CacheService.getScriptCache(), ck = 'today:' + gids.join(',');
+  const hit = cache.get(ck);
+  if (hit) return JSON.parse(hit);
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const lock = LockService.getScriptLock();
+  const locked = lock.tryLock(5000);
+  try {
+    const snap = jsonFileRead('result-snapshot.json');
+    const changed = {};
+    gids.forEach(gid => {
+      if (isRoster(gid)) return;
+      const sh = ss.getSheets().find(x => String(x.getSheetId()) === String(gid));
+      if (!sh || sh.getLastRow() < 2) return;
+      const n = sh.getLastRow() - 1;
+      const heads = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(h => String(h).trim());
+      const tcol = heads.findIndex(h => /^หัวข้อ/.test(h));
+      const rcols = heads.map((h, i) => /^ผลการทดสอบ/.test(h) ? i : -1).filter(i => i >= 0);
+      if (tcol < 0 || !rcols.length) return;
+      const titles = sh.getRange(2, tcol + 1, n, 1).getDisplayValues();
+      const results = rcols.map(c => sh.getRange(2, c + 1, n, 1).getDisplayValues());
+      const cur = {};
+      titles.forEach((t, i) => {
+        const k = String(t[0]).trim();
+        if (k) cur[k] = results.map(r => String(r[i][0]).trim()).join(' | ');
+      });
+      const st = snap[gid] || { day: '', base: null, last: null };
+      if (st.day !== today) { st.base = st.last || cur; st.day = today; }
+      changed[gid] = Object.keys(cur).filter(k => cur[k].replace(/[ |]/g, '') && cur[k] !== (st.base[k] || ''));
+      st.last = cur;
+      snap[gid] = st;
+    });
+    if (locked) jsonFileWrite('result-snapshot.json', snap);
+    const out = { ok: true, day: today, changed };
+    try { cache.put(ck, JSON.stringify(out), 60); } catch (err) { /* ใหญ่เกิน cache */ }
+    return out;
+  } finally {
+    if (locked) lock.releaseLock();
+  }
+}
+
+// ไฟล์ JSON ในโฟลเดอร์รูป (ใช้เก็บข้อมูลของระบบ) — จำรหัสไฟล์ไว้ใน Script Properties
+function jsonFile(name) {
+  const props = PropertiesService.getScriptProperties(), pk = 'file:' + name;
+  const id = props.getProperty(pk);
+  if (id) { try { return DriveApp.getFileById(id); } catch (err) { /* ถูกลบ สร้างใหม่ */ } }
+  const f = getFolder().createFile(name, '{}', 'application/json');
+  props.setProperty(pk, f.getId());
+  return f;
+}
+function jsonFileRead(name) {
+  try { return JSON.parse(jsonFile(name).getBlob().getDataAsString() || '{}'); } catch (err) { return {}; }
+}
+function jsonFileWrite(name, obj) { jsonFile(name).setContent(JSON.stringify(obj)); }
 
 // ---------- ไฟล์ประวัติผู้แก้ไข (JSON ไฟล์เดียวในโฟลเดอร์รูป) ----------
 // { gid: { แถว: { u: เวลาแก้ล่าสุด, e: [{who, when, ts, col}] } }, _built: { gid: 1 } }
