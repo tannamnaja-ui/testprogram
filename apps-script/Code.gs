@@ -31,7 +31,10 @@ const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเก
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'notes') {
+  if (prm.action === 'style') {
+    try { out = sheetStyle(prm.gid); }
+    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'notes') {
     try { out = editHistory(prm.gid); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'getitem') {
@@ -107,12 +110,40 @@ function editHistory(gid) {
 const ROSTER_GID = '1921321948';
 const ROSTER_HEADER_ROW = 2;
 const ROSTER_EDITABLE = ['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'];
+// แท็บแบบรายชื่อทั้งหมด: gid → คอลัมน์ที่แก้ได้ (ชื่อหัวตารางในแถว 2)
+const ROSTERS = {
+  '1921321948': ROSTER_EDITABLE,                                        // รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)
+  '1348359682': ['สถานะการส่ง WBS', 'ส่งหัวหน้าทีม', 'อัพขึ้น'],         // รายชื่อจัดทำวีดีโอ
+};
+const isRoster = gid => Object.prototype.hasOwnProperty.call(ROSTERS, String(gid));
+
+// สีพื้น สีตัวอักษร ตัวหนา และเซลล์ที่ผสาน ของแท็บแบบรายชื่อ (ให้หน้าเว็บแสดงเหมือนชีท)
+function sheetStyle(gid) {
+  gid = String(gid);
+  if (!isRoster(gid)) throw new Error('ใช้ได้เฉพาะแท็บแบบรายชื่อ');
+  const cache = CacheService.getScriptCache(), key = 'style:' + gid;
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
+    .find(s => String(s.getSheetId()) === gid);
+  if (!sh) throw new Error('ไม่พบแท็บ');
+  const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 500), sh.getLastColumn());
+  const out = {
+    ok: true,
+    bg: range.getBackgrounds(),
+    fc: range.getFontColors(),
+    bold: range.getFontWeights().map(r => r.map(w => w === 'bold' ? 1 : 0)),
+    merges: range.getMergedRanges().map(m => [m.getRow(), m.getColumn(), m.getNumRows(), m.getNumColumns()]),
+  };
+  try { cache.put(key, JSON.stringify(out), 300); } catch (err) { /* ใหญ่เกิน cache */ }
+  return out;
+}
 
 // ตัวเลือก dropdown (Data validation) ของคอลัมน์ที่แก้ได้ในแท็บนั้น + สีของตัวเลือกตามที่แสดงในชีท
 // สีอ่านจากหน้า HTML ของชีท จึงได้เฉพาะตัวเลือกที่มีคนเลือกใช้อยู่แล้ว
 function tabOptions(gid) {
   gid = String(gid);
-  const roster = gid === ROSTER_GID;
+  const roster = isRoster(gid);
   const cache = CacheService.getScriptCache(), key = 'opts:' + gid;
   const hit = cache.get(key);
   if (hit) return JSON.parse(hit);
@@ -127,7 +158,7 @@ function tabOptions(gid) {
   const cols = {};
   names.forEach((n, i) => {
     n = String(n).trim();
-    if (roster ? ROSTER_EDITABLE.indexOf(n) < 0 : !isItemEditable(n)) return;
+    if (roster ? ROSTERS[gid].indexOf(n) < 0 : !isItemEditable(n)) return;
     const list = listOf(rules[i]);
     if (list.length) cols[i + 1] = list;
   });
@@ -157,8 +188,11 @@ function listOf(rule) {
 }
 
 function setRosterCell(prm) {
+  const gid = String(prm.gid || ROSTER_GID);
+  if (!isRoster(gid)) throw new Error('แท็บนี้ไม่ใช่แท็บแบบรายชื่อ');
+  const editable = ROSTERS[gid];
   const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
-    .find(s => String(s.getSheetId()) === ROSTER_GID);
+    .find(s => String(s.getSheetId()) === gid);
   if (!sh) throw new Error('ไม่พบแท็บรายชื่อ');
   let col = Number(prm.col);
   let row = Number(prm.row);
@@ -174,7 +208,7 @@ function setRosterCell(prm) {
     const weekOf = c => { for (let k = c - 1; k >= 0; k--) { const v = String(heads[0][k]).trim(); if (v) return v; } return ''; };
     const nameOf = c => String(heads[ROSTER_HEADER_ROW - 1][c - 1]).trim();
     const header = String(prm.header || nameOf(col)).trim();
-    if (ROSTER_EDITABLE.indexOf(header) < 0) throw new Error('แก้ได้เฉพาะคอลัมน์ ' + ROSTER_EDITABLE.join(', '));
+    if (editable.indexOf(header) < 0) throw new Error('แก้ได้เฉพาะคอลัมน์ ' + editable.join(', '));
     // คอลัมน์ชื่อซ้ำกันได้ในแต่ละสัปดาห์: ต้องตรงทั้งชื่อคอลัมน์และหัวสัปดาห์ ถ้าคอลัมน์เลื่อน ให้ค้นหาใหม่
     const week = String(prm.week || '').trim();
     const ok = c => nameOf(c) === header && (!week || weekOf(c) === week);
@@ -197,7 +231,7 @@ function setRosterCell(prm) {
     }
     sh.getRange(row, col).setValue(value);
     noteEditor(sh.getRange(row, col), prm.editor);
-    CacheService.getScriptCache().remove('opts:' + ROSTER_GID); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
+    CacheService.getScriptCache().remove('opts:' + gid); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
   } finally {
     lock.releaseLock();
   }
@@ -211,7 +245,7 @@ const isItemEditable = h => ITEM_EDITABLE.some(x => String(h).trim().indexOf(x) 
 
 // หาแถวและคอลัมน์ของช่องที่จะแก้ (ถ้ามีการแทรกแถว/คอลัมน์ ให้ค้นจากหัวข้อและชื่อคอลัมน์)
 function resolveItemCell(p) {
-  if (String(p.gid) === ROSTER_GID) throw new Error('แท็บนี้ใช้การแก้ไขของหน้ารายชื่อ');
+  if (isRoster(p.gid)) throw new Error('แท็บนี้ใช้การแก้ไขของหน้ารายชื่อ');
   const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
     .find(s => String(s.getSheetId()) === String(p.gid));
   if (!sh) throw new Error('ไม่พบแท็บ');

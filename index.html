@@ -67,6 +67,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
 .m7{--mbg:#eef3e1;--mbd:#d9e5bd;--mfg:#556b1f}
 .m8{--mbg:#fdf6d8;--mbd:#f3e3a0;--mfg:#7a5c00}
 .m9{--mbg:#e9eef5;--mbd:#cdd8e6;--mfg:#2f4b6e}
+.m10{--mbg:#ffecd2;--mbd:#ffd29a;--mfg:#8a4b00}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .m0{--mbg:#232845;--mbd:#313968;--mfg:#b3bdf5}
   :root:not([data-theme="light"]) .m1{--mbg:#1b2a3a;--mbd:#25405a;--mfg:#9ccaf2}
@@ -78,6 +79,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
   :root:not([data-theme="light"]) .m7{--mbg:#262d17;--mbd:#3a4522;--mfg:#cfe39a}
   :root:not([data-theme="light"]) .m8{--mbg:#33290f;--mbd:#4d3e17;--mfg:#f0d48a}
   :root:not([data-theme="light"]) .m9{--mbg:#1d2633;--mbd:#2b3a4f;--mfg:#b5c9e6}
+  :root:not([data-theme="light"]) .m10{--mbg:#3a2a12;--mbd:#57401c;--mfg:#ffc98a}
 }
 main{border-top:3px solid var(--mbd)}
 nav a .n{font-weight:400;font-size:12px;margin-left:4px}
@@ -255,17 +257,19 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261014.161422';
+const APP_VERSION = '20261015.112235';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
-// color = เลขสีประจำเมนู (.m0–.m9) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
+// color = เลขสีประจำเมนู (.m0–.m10) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
 const TABS = [
   // roster = หน้ารายชื่อ (ไม่ใช่รายการทดสอบ): headerRow = แถวหัวตาราง, freezeCols = จำนวนคอลัมน์ซ้ายที่ตรึงไว้ (ตรึงที่ D2)
-  {name:'รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)', gid:'1921321948', roster:true, headerRow:2, freezeCols:3, color:9},
+  // editable = คอลัมน์ที่แก้ได้ (ชื่อหัวตารางแถว 2), sheetStyle = ใช้สี/ตัวหนา/เซลล์ผสานตามชีท, note = แสดงข้อความแจ้ง What's New
+  {name:'รายชื่อจัดทำวีดีโอ', gid:'1348359682', roster:true, headerRow:2, sheetStyle:true, editable:['สถานะการส่ง WBS', 'ส่งหัวหน้าทีม', 'อัพขึ้น'], color:10},
+  {name:'รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)', gid:'1921321948', roster:true, headerRow:2, freezeCols:3, note:true, editable:['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'], color:9},
   {name:'สรุป', gid:'750027123', summary:true, color:0},
   {name:'HOSxP V4', gid:'653470496', color:1},
   {name:'ไม่สามารถทดสอบได้', gid:'1356310016', color:8},
@@ -535,10 +539,9 @@ function filterBar(name, items, fl, extra='', countExtra=''){
 
 // ---------- views ----------
 // ---------- แก้ไขหน้ารายชื่อ (บันทึกลง Google Sheet ผ่าน Apps Script) ----------
-const ROSTER_EDITABLE = ['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'];
 // รายการคำที่เคยกรอกในคอลัมน์ชื่อเดียวกัน (ทุกสัปดาห์) ไว้ให้เลือกตอนพิมพ์
-function rosterLists(t, order){
-  return order.filter(i=>ROSTER_EDITABLE.includes(t.headers[i])).map(i=>{
+function rosterLists(tab, t, order){
+  return order.filter(i=>(tab.editable||[]).includes(t.headers[i])).map(i=>{
     const vals = new Set();
     t.headers.forEach((h,j)=>{ if(h===t.headers[i]) t.rows.forEach(r=>{ const v = norm(r[j]); if(v) vals.add(v); }); });
     return `<datalist id="dl-${i}">${[...vals].sort((a,b)=>a.localeCompare(b,'th')).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
@@ -565,11 +568,51 @@ function historyCell(gid, idx){
   return `<td class="hist">${list.map(h=>{ const [name, ...dev] = h.who.split(' · ');
     return `<div class="h-row"><b>${esc(name)}</b> <span class="h-col">${esc(h.col)}</span><small>${esc(h.when)}${dev.length ? ' · ' + esc(dev.join(' · ')) : ''}</small></div>`; }).join('')}</td>`;
 }
+// สีพื้น สีตัวอักษร ตัวหนา และเซลล์ผสานตามชีท (แท็บที่ตั้ง sheetStyle)
+const styleByGid = {};
+async function loadStyle(gid){
+  if(!UPLOAD_URL) return;
+  const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'style', gid}));
+  if(out.ok && out.bg) styleByGid[gid] = out;
+}
+// style="" ของช่องในชีท (แถว r, คอลัมน์ c นับจาก 1) ช่องสีขาวไม่ใส่ เพื่อให้แถวสลับสียังทำงาน
+function sheetCss(gid, r, c){
+  const st = styleByGid[gid]; if(!st) return '';
+  const bg = (st.bg[r-1]||[])[c-1], fc = (st.fc[r-1]||[])[c-1], b = (st.bold[r-1]||[])[c-1];
+  const css = [];
+  if(bg && !/^#fff(fff)?$/i.test(bg)) css.push(`background:${bg}`);
+  if(fc && !/^#000(000)?$/i.test(fc)) css.push(`color:${fc}`);
+  if(b) css.push('font-weight:700');
+  return css.length ? ` style="${css.join(';')}"` : '';
+}
+// เซลล์ผสานแนวตั้งในส่วนข้อมูล: รวมช่องเป็น rowspan (ตอนค้นหา ใช้ค่าจากช่องบนสุดแทน)
+function mergePlan(tab, t, shown){
+  const st = styleByGid[tab.gid]; const plan = {};
+  if(!st) return plan;
+  const searching = !!getFilter(tab.name).q.trim();
+  const shownRows = shown.map(it=>t.meta[it.idx].sheetRow);
+  const idxOfRow = {}; t.meta.forEach((m,k)=>idxOfRow[m.sheetRow] = k);
+  for(const [r, c, nr, nc] of st.merges){
+    if(nr < 2 || nc !== 1 || r <= (tab.headerRow||1)) continue;
+    const inRange = shownRows.filter(x=>x>=r && x<r+nr);
+    if(!inRange.length) continue;
+    if(searching){
+      const anchor = idxOfRow[r];
+      inRange.forEach(x=>{ if(x!==r) plan[x+':'+c] = {fill: anchor!=null ? t.rows[anchor] : null, anchorRow:r}; });
+    }else{
+      const first = inRange[0];
+      plan[first+':'+c] = {span: inRange.length, anchorRow:r};
+      inRange.slice(1).forEach(x=>plan[x+':'+c] = {skip:true});
+    }
+  }
+  return plan;
+}
 // โหลดตัวเลือกของแท็บที่เปิดอยู่ (ทุก 2 นาที) แล้ววาดใหม่
 function ensureOpts(tab){
   if(!tab || tab.summary || Date.now() - (optsLoadedAt[tab.gid]||0) < 120000) return;
   const jobs = [loadOpts(tab.gid)];
   if(!tab.roster) jobs.push(loadHistory(tab.gid));
+  if(tab.sheetStyle) jobs.push(loadStyle(tab.gid));
   Promise.all(jobs).then(()=>{ if(currentTab()===tab && !editing) softRender(); }).catch(e=>console.warn('ตัวเลือก/ประวัติ:', e.message));
 }
 // สีของตัวเลือก: ตามที่แสดงในชีท ถ้ายังไม่มีใครเลือกใช้ ใช้สีเดาจากคำ
@@ -602,13 +645,13 @@ async function saveRosterCell(inp){
   if(value === norm(t.rows[idx][i])) return;
   if(!UPLOAD_URL){ alert('ยังไม่ได้ตั้งค่า Apps Script'); return; }
   if(!askEditorName()){ inp.value = norm(t.rows[idx][i]); if(inp.tagName==='SELECT') paintSelect(inp); return; }
-  const nameCol = t.headers.findIndex(h=>/ชื่อ-นามสกุล/.test(h));
+  const nameCol = t.headers.findIndex(h=>/ชื่อ-นามสกุล|รายชื่อ/.test(h));
   inp.classList.remove('saved','failed'); inp.classList.add('saving');
   try{
     // หัวสัปดาห์ของคอลัมน์นี้ (ข้อความในแถว 1 ที่ใกล้ที่สุดทางซ้าย) ให้สคริปต์ตรวจว่าบันทึกถูกสัปดาห์
     let week = '';
     for(let k=t.colIdx[i]; k>=0 && !week; k--) week = (t.top && t.top[k]) || '';
-    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'setcell', row:t.meta[idx].sheetRow, col:sheetCol(t, idx, i),
+    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'setcell', gid, row:t.meta[idx].sheetRow, col:sheetCol(t, idx, i),
       header:t.headers[i], week, value, editor:editorLabel(), ncol: nameCol>=0 ? sheetCol(t, idx, nameCol) : '', name: nameCol>=0 ? norm(t.rows[idx][nameCol]) : ''}));
     if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับการบันทึก กรุณาอัปเดตสคริปต์');
     t.rows[idx][i] = value; t.meta[idx].sheetRow = out.row;
@@ -723,9 +766,9 @@ async function closeEditor(newValue){
 }
 
 // แถบค้นหาแบบย่อ (หน้ารายชื่อไม่มีกลุ่ม/ประเภท/ผลการทดสอบ)
-function searchBar(fl){
-  return `<div class="filters"><div class="fld"><span class="fldhead"><span>ค้นหา</span><b id="count"></b></span><span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div>
-    <div class="roster-note">การทดสอบ ให้เป็นเวอร์ชั่นปัจจุบันเสมอ และต้องเข้าไปดูข้อมูลใน What's New ที่ลิงก์นี้ <a href="https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/" target="_blank" rel="noopener">https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/</a> ว่าระบบงานที่ตนเองทดสอบมีอะไรมาใหม่บ้างในทุกวัน</div></div>`;
+function searchBar(fl, tab){
+  return `<div class="filters"><div class="fld"><span class="fldhead"><span>ค้นหา</span><b id="count"></b></span><span class="qrow"><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button></span></div>${tab.note ? `
+    <div class="roster-note">การทดสอบ ให้เป็นเวอร์ชั่นปัจจุบันเสมอ และต้องเข้าไปดูข้อมูลใน What's New ที่ลิงก์นี้ <a href="https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/" target="_blank" rel="noopener">https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/</a> ว่าระบบงานที่ตนเองทดสอบมีอะไรมาใหม่บ้างในทุกวัน</div>` : ''}</div>`;
 }
 // ตรึงคอลัมน์ซ้าย (เหมือนตรึงแนวใน Google Sheet): วัดความกว้างจริงแล้วตั้งตำแหน่ง sticky
 function applyFreeze(){
@@ -763,14 +806,22 @@ function renderSheet(tab){
   const mv = t.headers.indexOf('ผลการทดสอบ') >= 0 ? t.headers.indexOf('ผลการทดสอบ') : resCol;
   if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
   const showHist = !tab.roster && !!UPLOAD_URL;
-  const body = shown.map(it=>`<tr>${order.map(i=>{ const c = it.row[i];
+  const merge = tab.sheetStyle ? mergePlan(tab, t, shown) : {};
+  const body = shown.map(it=>`<tr>${order.map(i=>{ let c = it.row[i];
+      const sr = t.meta[it.idx].sheetRow, sc = sheetCol(t, it.idx, i), mg = merge[sr+':'+sc];
+      if(mg && mg.skip) return '';
+      if(mg && mg.fill) c = mg.fill[i];
+      if(tab.sheetStyle){
+        const css = sheetCss(tab.gid, mg ? mg.anchorRow : sr, sc), span = mg && mg.span ? ` rowspan="${mg.span}"` : '';
+        if(!(tab.editable||[]).includes(t.headers[i])) return `<td${span}${css}>${linkify(norm(c))}</td>`;
+      }
       if(i===t.f.image) return imageCell(tab.gid, it.idx);
       const ed = canEditItem(tab, t, i) ? ` ed" data-cell="${tab.gid}:${it.idx}:${i}" title="คลิกเพื่อแก้ไข (บันทึกลง Google Sheet อัตโนมัติ)` : '';
       if(i===resCol) return `<td class="w-res${ed}">${itemCellHtml(t, i, c)}</td>`;
       if(tab.roster && tabOpts(tab.gid).cols[sheetCol(t, it.idx, i)])
-        return `<td class="edit">${rosterSelect(tab.gid, it.idx, i, norm(c))}</td>`;
-      if(tab.roster && ROSTER_EDITABLE.includes(t.headers[i]))
-        return `<td class="edit"><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
+        return `<td class="edit"${tab.sheetStyle ? sheetCss(tab.gid, sr, sc) : ''}>${rosterSelect(tab.gid, it.idx, i, norm(c))}</td>`;
+      if(tab.roster && (tab.editable||[]).includes(t.headers[i]))
+        return `<td class="edit"${tab.sheetStyle ? sheetCss(tab.gid, sr, sc) : ''}><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
       return `<td class="${tab.roster ? '' : cls(t.headers[i])}${ed}">${linkify(norm(c))}</td>`;
     }).join('')}${showHist ? historyCell(tab.gid, it.idx) : ''}</tr>`).join('');
   // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
@@ -782,14 +833,14 @@ function renderSheet(tab){
       while(k+span<order.length && !label(order[k+span]) && k+span!==tab.freezeCols) span++;
       // บรรทัดที่ 2 เป็นต้นไปของหัวสัปดาห์ (เช่น วันประชุม) เป็นสีแดง
       const [first, ...rest] = label(order[k]).split('\n');
-      topRow += `<th colspan="${span}" class="top">${esc(first)}${rest.map(l=>`<span class="top-red">${esc(l)}</span>`).join('')}</th>`;
+      topRow += `<th colspan="${span}" class="top"${tab.sheetStyle ? sheetCss(tab.gid, (tab.headerRow||2)-1, t.colIdx[order[k]]+1) : ''}>${esc(first)}${rest.map(l=>`<span class="top-red">${esc(l)}</span>`).join('')}</th>`;
       k += span;
     }
     topRow = `<tr>${topRow}</tr>`;
   }
-  return (tab.roster ? searchBar(fl) : filterBar(tab.name, all, fl)) +
-    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}>${esc(t.headers[i])}</th>`).join('')}${showHist ? '<th class="th-hist">ประวัติผู้แก้ไข</th>' : ''}</tr></thead>
-     <tbody>${body || `<tr><td colspan="${order.length + (showHist?1:0)}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>${tab.roster ? rosterLists(t, order) : ''}
+  return (tab.roster ? searchBar(fl, tab) : filterBar(tab.name, all, fl)) +
+    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}${tab.sheetStyle ? sheetCss(tab.gid, tab.headerRow||1, t.colIdx[i]+1) : ''}>${esc(t.headers[i])}</th>`).join('')}${showHist ? '<th class="th-hist">ประวัติผู้แก้ไข</th>' : ''}</tr></thead>
+     <tbody>${body || `<tr><td colspan="${order.length + (showHist?1:0)}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>${tab.roster ? rosterLists(tab, t, order) : ''}
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
 
