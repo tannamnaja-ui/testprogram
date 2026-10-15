@@ -134,41 +134,56 @@ function todayChanges(gids) {
   const cache = CacheService.getScriptCache(), ck = 'today:' + gids.join(',');
   const hit = cache.get(ck);
   if (hit) return JSON.parse(hit);
+  // อ่านชีทโดยไม่ล็อก (อ่านอย่างเดียว) เพื่อไม่ให้คำสั่งอื่นต้องรอ
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const lock = LockService.getScriptLock();
-  const locked = lock.tryLock(5000);
-  try {
-    const snap = jsonFileRead('result-snapshot.json');
-    const changed = {};
-    gids.forEach(gid => {
-      if (isRoster(gid)) return;
-      const sh = ss.getSheets().find(x => String(x.getSheetId()) === String(gid));
-      if (!sh || sh.getLastRow() < 2) return;
-      const n = sh.getLastRow() - 1;
-      const heads = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(h => String(h).trim());
-      const tcol = heads.findIndex(h => /^หัวข้อ/.test(h));
-      const rcols = heads.map((h, i) => /^ผลการทดสอบ/.test(h) ? i : -1).filter(i => i >= 0);
-      if (tcol < 0 || !rcols.length) return;
-      const titles = sh.getRange(2, tcol + 1, n, 1).getDisplayValues();
-      const results = rcols.map(c => sh.getRange(2, c + 1, n, 1).getDisplayValues());
-      const cur = {};
-      titles.forEach((t, i) => {
-        const k = String(t[0]).trim();
-        if (k) cur[k] = results.map(r => String(r[i][0]).trim()).join(' | ');
-      });
-      const st = snap[gid] || { day: '', base: null, last: null };
-      if (st.day !== today) { st.base = st.last || cur; st.day = today; }
-      changed[gid] = Object.keys(cur).filter(k => cur[k].replace(/[ |]/g, '') && cur[k] !== (st.base[k] || ''));
-      st.last = cur;
-      snap[gid] = st;
+  const sheets = ss.getSheets();
+  const snap = jsonFileRead('result-snapshot.json');
+  const changed = {};
+  gids.forEach(gid => {
+    if (isRoster(gid)) return;
+    const sh = sheets.find(x => String(x.getSheetId()) === String(gid));
+    if (!sh || sh.getLastRow() < 2) return;
+    const n = sh.getLastRow() - 1;
+    const heads = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(h => String(h).trim());
+    const tcol = heads.findIndex(h => /^หัวข้อ/.test(h));
+    const rcols = heads.map((h, i) => /^ผลการทดสอบ/.test(h) ? i : -1).filter(i => i >= 0);
+    if (tcol < 0 || !rcols.length) return;
+    const titles = sh.getRange(2, tcol + 1, n, 1).getDisplayValues();
+    const results = rcols.map(c => sh.getRange(2, c + 1, n, 1).getDisplayValues());
+    // เก็บด้วยรหัสสั้นของหัวข้อ (ไฟล์เล็ก อ่าน/เขียนเร็ว) แต่ส่งกลับเป็นหัวข้อจริง
+    const cur = {}, titleOf = {};
+    titles.forEach((t, i) => {
+      const title = String(t[0]).trim();
+      if (!title) return;
+      const k = shortKey(title);
+      cur[k] = results.map(r => String(r[i][0]).trim()).join('|');
+      titleOf[k] = title;
     });
-    if (locked) jsonFileWrite('result-snapshot.json', snap);
-    const out = { ok: true, day: today, changed };
-    try { cache.put(ck, JSON.stringify(out), 60); } catch (err) { /* ใหญ่เกิน cache */ }
-    return out;
-  } finally {
-    if (locked) lock.releaseLock();
+    const st = snap[gid] || { day: '', base: null, last: null };
+    // ข้อมูลรุ่นก่อนเก็บด้วยหัวข้อเต็มและคั่นผลด้วย ' | ' — แปลงเป็นรูปแบบใหม่
+    if (!st.v2) { st.base = rekey(st.base); st.last = rekey(st.last); st.v2 = 1; }
+    if (st.day !== today) { st.base = st.last || cur; st.day = today; }
+    changed[gid] = Object.keys(cur).filter(k => cur[k].replace(/\|/g, '') && cur[k] !== (st.base[k] || '')).map(k => titleOf[k]);
+    st.last = cur;
+    snap[gid] = st;
+  });
+  // ล็อกเฉพาะตอนเขียนไฟล์ ถ้ามีคำสั่งอื่นใช้อยู่ก็ข้ามไป (รอบหน้าค่อยเขียน)
+  const lock = LockService.getScriptLock();
+  if (lock.tryLock(2000)) {
+    try { jsonFileWrite('result-snapshot.json', snap); } finally { lock.releaseLock(); }
   }
+  const out = { ok: true, day: today, changed };
+  try { cache.put(ck, JSON.stringify(out), 120); } catch (err) { /* ใหญ่เกิน cache */ }
+  return out;
+}
+function rekey(map) {
+  if (!map) return map;
+  const out = {};
+  for (const k in map) out[shortKey(k)] = String(map[k]).split(' | ').join('|');
+  return out;
+}
+function shortKey(text) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, text, Utilities.Charset.UTF_8)).slice(0, 12);
 }
 
 // ไฟล์ JSON ในโฟลเดอร์รูป (ใช้เก็บข้อมูลของระบบ) — จำรหัสไฟล์ไว้ใน Script Properties

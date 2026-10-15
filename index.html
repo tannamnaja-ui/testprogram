@@ -277,7 +277,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.144950';
+const APP_VERSION = '20261015.152102';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -576,7 +576,10 @@ async function loadOpts(gid){
   if(!UPLOAD_URL) return;
   optsLoadedAt[gid] = Date.now();
   const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid}));
-  if(out.ok && out.cols) optsByGid[gid] = {cols: out.cols, colors: Object.assign({}, out.colors, await chipColors(gid))};
+  if(out.ok && out.cols){
+    optsByGid[gid] = {cols: out.cols, colors: Object.assign({}, out.colors, await chipColors(gid))};
+    memSet('opts:' + gid, optsByGid[gid]);
+  }
 }
 // สีของชิป dropdown ตามที่แสดงในชีท: อ่านจากหน้า HTML ของชีทโดยตรง (เฉพาะแท็บที่ไม่ใหญ่มาก)
 // ได้สีของตัวเลือกที่มีคนเลือกใช้ในชีทแล้วอย่างน้อย 1 ช่อง
@@ -615,7 +618,7 @@ const styleByGid = {};
 async function loadStyle(gid){
   if(!UPLOAD_URL) return;
   const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'style', gid}));
-  if(out.ok && out.bg) styleByGid[gid] = out;
+  if(out.ok && out.bg){ styleByGid[gid] = out; memSet('style:' + gid, out); }
 }
 // style="" ของช่องในชีท (แถว r, คอลัมน์ c นับจาก 1) ช่องสีขาวไม่ใส่ เพื่อให้แถวสลับสียังทำงาน
 function sheetCss(gid, r, c){
@@ -892,15 +895,22 @@ function renderSheet(tab){
 const todayByGid = {}; let todayLoadedAt = 0, todayLoading = false;
 const todayChanged = gid => todayByGid[gid] || new Set();
 function ensureToday(gids){
-  if(!UPLOAD_URL || todayLoading || Date.now() - todayLoadedAt < 120000) return;
+  if(!UPLOAD_URL || todayLoading || Date.now() - todayLoadedAt < 180000) return;
   todayLoading = true;
   const want = TABS.filter(t=>!t.summary && !t.roster).map(t=>t.gid); // โหลดทุกแท็บครั้งเดียว ใช้ได้กับทุกตัวเลือก "ข้อมูลจากชีท"
   jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'today', gids: want.join(',')})).then(out=>{
-    if(out.ok && out.changed) for(const g in out.changed) todayByGid[g] = new Set(out.changed[g]);
+    if(out.ok && out.changed){
+      for(const g in out.changed) todayByGid[g] = new Set(out.changed[g]);
+      memSet('today', {day: out.day, changed: out.changed});
+    }
     todayLoadedAt = Date.now();
     if(currentTab().summary) softRender();
   }).catch(e=>console.warn('ทดสอบวันนี้:', e.message)).finally(()=>{ todayLoading = false; });
 }
+
+// ค่าที่จำไว้ในเบราว์เซอร์ (localStorage) — ถ้าใช้ไม่ได้ก็ทำงานต่อตามปกติ
+function memGet(k){ try{ return JSON.parse(localStorage.getItem('mem:' + k) || 'null'); }catch(e){ return null; } }
+function memSet(k, v){ try{ localStorage.setItem('mem:' + k, JSON.stringify(v)); }catch(e){} }
 
 const RESULT_BUCKETS = [
   {name:'ทดสอบผ่าน', cls:'r-pass'},
@@ -1340,6 +1350,14 @@ async function checkVersion(){
   }catch(e){}
 }
 document.getElementById('ver').textContent = 'v' + APP_VERSION;
+// ใช้สี ตัวเลือก dropdown และ "ทดสอบวันนี้" ที่จำไว้ในเบราว์เซอร์จากครั้งก่อน แสดงได้ทันที แล้วค่อยโหลดใหม่ตามหลัง
+for(const t of TABS){
+  const o = memGet('opts:' + t.gid); if(o) optsByGid[t.gid] = o;
+  const st = memGet('style:' + t.gid); if(st) styleByGid[t.gid] = st;
+}
+{ const td = memGet('today');
+  const todayStr = new Date().toLocaleDateString('sv-SE', {timeZone:'Asia/Bangkok'});
+  if(td && td.day === todayStr) for(const g in td.changed) todayByGid[g] = new Set(td.changed[g]); }
 checkVersion();
 showEditorBtn();
 // ระหว่างเปิดหน้าค้างไว้ ตรวจเวอร์ชันใหม่ทุก 2 นาที (ไม่โหลดใหม่ระหว่างใช้งานตัวกรอง/ดูรูป/อัปโหลด)
