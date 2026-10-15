@@ -123,7 +123,7 @@ table.data,table.sum{border-collapse:separate;border-spacing:0}
 .data .frz-last{box-shadow:3px 0 0 -1px var(--grid)}
 /* หน้ารายชื่อ: ตารางกว้างพอดีข้อความ และหัวตารางชั้นบน (หัวสัปดาห์) */
 table.data.fit{width:auto}
-.data.fit th{white-space:pre-line}
+.data.fit th{white-space:nowrap} /* หน้ารายชื่อ: หัวคอลัมน์กว้างตามข้อความ ไม่ตัดบรรทัด (บรรทัดที่ 2 ของหัวสัปดาห์แยกเป็นบรรทัดของตัวเองอยู่แล้ว) */
 .data.fit td{white-space:nowrap} /* หน้ารายชื่อ: ช่องกว้างพอดีกับข้อความ ไม่ตัดบรรทัด */
 .data.fit .cell-sel{min-width:0}
 .data th.top{text-align:center;vertical-align:middle;font-weight:700}
@@ -259,7 +259,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.115822';
+const APP_VERSION = '20261015.120353';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
