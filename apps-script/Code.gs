@@ -23,7 +23,7 @@ const KEY_PREFIX = 'row:';
 
 // OAuth Client ID ของปุ่ม "เข้าสู่ระบบด้วย Google" (ต้องตรงกับค่า GOOGLE_CLIENT_ID ใน index.html)
 const GOOGLE_CLIENT_ID = '';
-const PRESENCE_TTL_MS = 90 * 1000; // ไม่ส่งสัญญาณเกินเวลานี้ = ออกไปแล้ว
+const PRESENCE_TTL_MS = 150 * 1000; // ไม่ส่งสัญญาณเกินเวลานี้ = ออกไปแล้ว (หน้าเว็บส่งทุก 60 วินาที)
 
 // GET ?action=list → รายการรูปทั้งหมดพร้อมข้อที่อัปโหลด
 // GET ?action=ping&vid=... → แจ้งว่ายังเปิดดูอยู่ และรับรายชื่อผู้ที่กำลังดู
@@ -54,16 +54,7 @@ function doGet(e) {
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
   } else if (prm.action === 'list') {
     try {
-      const files = [];
-      const it = getFolder().getFiles();
-      while (it.hasNext()) {
-        const f = it.next();
-        const desc = f.getDescription() || '';
-        if (desc.indexOf(KEY_PREFIX) !== 0) continue;
-        files.push({ id: f.getId(), key: desc.slice(KEY_PREFIX.length), name: f.getName(), created: f.getDateCreated().getTime() });
-      }
-      files.sort((a, b) => a.created - b.created);
-      out = { ok: true, files };
+      out = { ok: true, files: imageIndex(prm.rebuild === '1') };
     } catch (err) {
       out = { ok: false, error: String((err && err.message) || err) };
     }
@@ -71,6 +62,43 @@ function doGet(e) {
     out = { ok: true, message: 'upload service is running' };
   }
   return reply(out, prm.callback);
+}
+
+// ---------- ดัชนีรูป (เร็วกว่าการเปิดไฟล์ใน Drive ทีละไฟล์) ----------
+// เก็บใน Script Properties: img:<fileId> = {k: key ของข้อ, n: ชื่อไฟล์, c: เวลาสร้าง}
+// สร้างใหม่จากโฟลเดอร์ครั้งแรก, ทุก 24 ชั่วโมง หรือเมื่อเรียก ?action=list&rebuild=1
+const IMG_PREFIX = 'img:';
+function imageIndex(rebuild) {
+  const props = PropertiesService.getScriptProperties();
+  let all = props.getProperties();
+  const built = Number(all['img_index_built'] || 0);
+  if (rebuild || !built || Date.now() - built > 24 * 3600 * 1000) {
+    const lock = LockService.getScriptLock();
+    if (lock.tryLock(1000)) {
+      try {
+        const add = {};
+        const it = getFolder().getFiles();
+        while (it.hasNext()) {
+          const f = it.next();
+          const d = f.getDescription() || '';
+          if (d.indexOf(KEY_PREFIX) !== 0) continue;
+          add[IMG_PREFIX + f.getId()] = JSON.stringify({ k: d.slice(KEY_PREFIX.length), n: f.getName(), c: f.getDateCreated().getTime() });
+        }
+        Object.keys(all).forEach(k => { if (k.indexOf(IMG_PREFIX) === 0 && !add[k]) props.deleteProperty(k); });
+        add['img_index_built'] = String(Date.now());
+        props.setProperties(add);
+        all = props.getProperties();
+      } finally {
+        lock.releaseLock();
+      }
+    }
+  }
+  const files = [];
+  for (const k in all) {
+    if (k.indexOf(IMG_PREFIX) !== 0) continue;
+    try { const v = JSON.parse(all[k]); files.push({ id: k.slice(IMG_PREFIX.length), key: v.k, name: v.n, created: v.c }); } catch (e) {}
+  }
+  return files.sort((a, b) => a.created - b.created);
 }
 
 // บันทึกชื่อผู้แก้เป็นโน้ตของช่องนั้น (ล่าสุดอยู่บน เก็บ 10 ครั้งหลังสุด) — ไม่ต้องเพิ่มแท็บใหม่
@@ -84,6 +112,9 @@ function noteEditor(range, editor) {
 
 // ประวัติผู้แก้ไขของทุกแถวในแท็บ (อ่านจากโน้ตของแต่ละช่อง) ล่าสุดอยู่บน
 function editHistory(gid) {
+  const cache = CacheService.getScriptCache(), ckey = 'notes:' + gid;
+  const hit = cache.get(ckey);
+  if (hit) return JSON.parse(hit);
   const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()
     .find(s => String(s.getSheetId()) === String(gid));
   if (!sh) throw new Error('ไม่พบแท็บ');
@@ -102,7 +133,9 @@ function editHistory(gid) {
     });
   }));
   for (const k in rows) rows[k].sort((a, b) => b.ts - a.ts);
-  return { ok: true, rows };
+  const out = { ok: true, rows };
+  try { cache.put(ckey, JSON.stringify(out), 60); } catch (err) { /* ใหญ่เกิน cache */ }
+  return out;
 }
 
 // ---------- แก้ไขหน้ารายชื่อ ----------
@@ -166,19 +199,9 @@ function tabOptions(gid) {
     const list = listOf(rule);
     if (list.length) cols[i + 1] = list;
   });
-  const colors = {};
-  try {
-    const html = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID +
-      '/htmlview/sheet?headers=true&gid=' + gid, { muteHttpExceptions: true }).getContentText();
-    const re = /style="background-color: (#[0-9a-fA-F]{6}); color: (#[0-9a-fA-F]{6});[^"]*">([^<]+)<\/span>/g;
-    let m;
-    while ((m = re.exec(html))) {
-      const text = m[3].replace(/​/g, '').trim();
-      if (text && !colors[text]) colors[text] = { bg: m[1], fg: m[2] };
-    }
-  } catch (err) { /* ไม่มีสีก็ยังเลือกได้ */ }
-  const out = { ok: true, cols, colors, types };
-  try { cache.put(key, JSON.stringify(out), roster ? 60 : 600); } catch (err) { /* ใหญ่เกิน cache */ }
+  // สีของตัวเลือก หน้าเว็บอ่านเองจากหน้าชีท (การโหลดหน้าชีทจากสคริปต์ช้าและได้ผลว่าง)
+  const out = { ok: true, cols, colors: {}, types };
+  try { cache.put(key, JSON.stringify(out), 600); } catch (err) { /* ใหญ่เกิน cache */ }
   return out;
 }
 
@@ -235,7 +258,7 @@ function setRosterCell(prm) {
     }
     sh.getRange(row, col).setValue(value);
     noteEditor(sh.getRange(row, col), prm.editor);
-    CacheService.getScriptCache().remove('opts:' + gid); // ให้สีของตัวเลือกที่เพิ่งใช้แสดงในรอบถัดไป
+    CacheService.getScriptCache().removeAll(['opts:' + gid, 'notes:' + gid]);
   } finally {
     lock.releaseLock();
   }
@@ -276,6 +299,7 @@ function setItemCell(p) {
     const value = String(p.value == null ? '' : p.value).slice(0, 40000);
     c.sh.getRange(c.row, c.col).setValue(value);
     noteEditor(c.sh.getRange(c.row, c.col), p.editor);
+    CacheService.getScriptCache().remove('notes:' + p.gid);
     return { ok: true, row: c.row, col: c.col };
   } finally {
     lock.releaseLock();
@@ -300,6 +324,7 @@ function deleteImage(prm) {
   while (parents.hasNext()) if (parents.next().getId() === FOLDER_ID) inFolder = true;
   if (!inFolder) throw new Error('ลบได้เฉพาะรูปในโฟลเดอร์เก็บรูปของระบบ');
   file.setTrashed(true);
+  PropertiesService.getScriptProperties().deleteProperty(IMG_PREFIX + id);
 
   // เอาลิงก์ของรูปนี้ออกจากช่องภาพในชีท (ถ้ามี)
   let sheetUpdated = false;
@@ -334,9 +359,8 @@ function presence(prm) {
   const profile = prm.token ? verifyIdToken(prm.token) : null;
   const cache = CacheService.getScriptCache();
   const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  let map;
-  try {
+  let map = JSON.parse(cache.get('presence') || '{}');
+  if (lock.tryLock(3000)) try {
     map = JSON.parse(cache.get('presence') || '{}');
     const now = Date.now();
     for (const k in map) if (now - map[k].last > PRESENCE_TTL_MS) delete map[k];
@@ -394,6 +418,8 @@ function doPost(e) {
     const name = [p.sheetName, p.no, p.filename || 'image'].filter(String).join('_');
     const file = getFolder().createFile(Utilities.newBlob(bytes, p.mimeType, name));
     file.setDescription(KEY_PREFIX + p.key);
+    PropertiesService.getScriptProperties().setProperty(IMG_PREFIX + file.getId(),
+      JSON.stringify({ k: p.key, n: name, c: Date.now() }));
     const warnings = [];
     try {
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);

@@ -259,7 +259,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.114251';
+const APP_VERSION = '20261015.115822';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -1108,7 +1108,7 @@ async function uploadFiles(files){
 }
 
 // ---------- ผู้ที่กำลังดู ----------
-const PING_SEC = 30;
+const PING_SEC = 60; // ส่งสัญญาณ "กำลังดู" ทุก 60 วินาที (สคริปต์ถือว่าออกไปแล้วถ้าเงียบเกิน 150 วินาที)
 let sid = null;
 try{ sid = sessionStorage.getItem('sid'); }catch(e){}
 if(!sid){
