@@ -257,10 +257,10 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.113039';
+const APP_VERSION = '20261015.113720';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
-const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby0yvLLVXkK-H5Tf9Sjy_uzSEk9unT6LauSIUTOYBbp37d2AVlwublLvLBJUFpcp43a/exec';
+const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
@@ -620,9 +620,9 @@ function optColor(v, gid){
   if(!v) return null;
   const sheet = tabOpts(gid).colors;
   if(sheet[v]) return sheet[v];
-  if(/ไม่ผ่าน|ยกเลิก/.test(v)) return {bg:'#ffcfc9', fg:'#b10202'};
+  if(/ไม่ผ่าน|ยกเลิก|^ยังไม่/.test(v)) return {bg:'#ffcfc9', fg:'#b10202'};
   if(/ไม่ได้|ไม่สามารถ|ติดปัญหา/.test(v)) return {bg:'#ffe5a0', fg:'#473821'};
-  if(/ผ่าน|เสร็จ|เรียบร้อย/.test(v)) return {bg:'#d4edbc', fg:'#11734b'};
+  if(/ผ่าน|เสร็จ|เรียบร้อย|แล้ว/.test(v)) return {bg:'#d4edbc', fg:'#11734b'};
   if(/กำลัง|ระหว่าง/.test(v)) return {bg:'#c6dbe1', fg:'#215a6c'};
   return {bg:'#e8eaed', fg:'#000000'};
 }
