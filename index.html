@@ -228,7 +228,7 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .card .sum tbody tr:nth-child(even):not(.total) td{background:var(--zebra)}
 .card .sum tr.total td{background:var(--tint-strong)}
 .card .sum tbody tr:not(.total):hover td{background:var(--accent-soft)}
-.card .sum .r-today{background:#e8f0fe;font-weight:700;color:#1a56b8}
+.card .sum .r-today{background:#e8f0fe;font-weight:700;color:#1a56b8;width:1%;white-space:nowrap;padding-left:10px;padding-right:10px} /* กว้างเท่าข้อความหัวคอลัมน์ */
 .card .sum .r-pass{background:var(--pass-bg)}
 .card .sum .r-fail{background:var(--fail-bg)}
 .card .sum .r-na{background:var(--na-bg)}
@@ -277,7 +277,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.144444';
+const APP_VERSION = '20261015.144950';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
