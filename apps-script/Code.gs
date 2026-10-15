@@ -154,12 +154,16 @@ function tabOptions(gid) {
   const lastCol = sh.getLastColumn();
   if (sh.getLastRow() <= headerRow) return { ok: true, cols: {}, colors: {} };
   const names = sh.getRange(headerRow, 1, 1, lastCol).getDisplayValues()[0];
-  const rules = sh.getRange(headerRow + 1, 1, 1, lastCol).getDataValidations()[0];
-  const cols = {};
+  // dropdown อาจตั้งไว้ไม่ครบทุกแถว: ไล่หาแถวแรกของแต่ละคอลัมน์ที่มีการตั้งค่า
+  const nRows = Math.min(sh.getLastRow() - headerRow, 500);
+  const rules = sh.getRange(headerRow + 1, 1, nRows, lastCol).getDataValidations();
+  const cols = {}, types = {};
   names.forEach((n, i) => {
     n = String(n).trim();
     if (roster ? ROSTERS[gid].indexOf(n) < 0 : !isItemEditable(n)) return;
-    const list = listOf(rules[i]);
+    const rule = (rules.find(r => r[i]) || [])[i];
+    types[n] = rule ? String(rule.getCriteriaType()) : 'ไม่มี dropdown';
+    const list = listOf(rule);
     if (list.length) cols[i + 1] = list;
   });
   const colors = {};
@@ -173,7 +177,7 @@ function tabOptions(gid) {
       if (text && !colors[text]) colors[text] = { bg: m[1], fg: m[2] };
     }
   } catch (err) { /* ไม่มีสีก็ยังเลือกได้ */ }
-  const out = { ok: true, cols, colors };
+  const out = { ok: true, cols, colors, types };
   try { cache.put(key, JSON.stringify(out), roster ? 60 : 600); } catch (err) { /* ใหญ่เกิน cache */ }
   return out;
 }
