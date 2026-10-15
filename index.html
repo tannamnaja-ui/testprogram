@@ -259,7 +259,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.114024';
+const APP_VERSION = '20261015.114251';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -556,7 +556,24 @@ async function loadOpts(gid){
   if(!UPLOAD_URL) return;
   optsLoadedAt[gid] = Date.now();
   const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid}));
-  if(out.ok && out.cols) optsByGid[gid] = {cols: out.cols, colors: out.colors || {}};
+  if(out.ok && out.cols) optsByGid[gid] = {cols: out.cols, colors: Object.assign({}, out.colors, await chipColors(gid))};
+}
+// สีของชิป dropdown ตามที่แสดงในชีท: อ่านจากหน้า HTML ของชีทโดยตรง (เฉพาะแท็บที่ไม่ใหญ่มาก)
+// ได้สีของตัวเลือกที่มีคนเลือกใช้ในชีทแล้วอย่างน้อย 1 ช่อง
+async function chipColors(gid){
+  const colors = {};
+  if((data[gid]?.rows.length || 0) > 150) return colors;
+  try{
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/htmlview/sheet?headers=true&gid=${gid}&_=${Date.now()}`, {cache:'no-store'});
+    const html = await res.text();
+    const re = /style="background-color: (#[0-9a-fA-F]{6}); color: (#[0-9a-fA-F]{6});[^"]*">([^<]+)<\/span>/g;
+    let m;
+    while((m = re.exec(html))){
+      const text = m[3].replace(/​/g, '').trim();
+      if(text && !colors[text]) colors[text] = {bg: m[1], fg: m[2]};
+    }
+  }catch(e){ console.warn('สีชิป:', e.message); }
+  return colors;
 }
 // ประวัติผู้แก้ไขของแต่ละแถว (จากโน้ตของช่องในชีท): historyByGid[gid][เลขแถวในชีท] = [{who, when, col}] ล่าสุดอยู่บน
 const historyByGid = {};
