@@ -228,6 +228,7 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .card .sum tbody tr:nth-child(even):not(.total) td{background:var(--zebra)}
 .card .sum tr.total td{background:var(--tint-strong)}
 .card .sum tbody tr:not(.total):hover td{background:var(--accent-soft)}
+.pend-chk{display:inline-flex;align-items:center;gap:6px;margin:6px 8px;font-size:14px;font-weight:600;cursor:pointer}
 .card .sum .r-today{background:#e8f0fe;font-weight:700;color:#1a56b8;width:1%;white-space:nowrap;padding-left:10px;padding-right:10px} /* กว้างเท่าข้อความหัวคอลัมน์ */
 .card .sum .r-pass{background:var(--pass-bg)}
 .card .sum .r-fail{background:var(--fail-bg)}
@@ -277,7 +278,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261015.161317';
+const APP_VERSION = '20261017.014459';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -924,6 +925,7 @@ function ensureToday(gids){
 // ค่าที่จำไว้ในเบราว์เซอร์ (localStorage) — ถ้าใช้ไม่ได้ก็ทำงานต่อตามปกติ
 function memGet(k){ try{ return JSON.parse(localStorage.getItem('mem:' + k) || 'null'); }catch(e){ return null; } }
 function memSet(k, v){ try{ localStorage.setItem('mem:' + k, JSON.stringify(v)); }catch(e){} }
+let onlyPending = !!memGet('onlyPending');
 
 const RESULT_BUCKETS = [
   {name:'ทดสอบผ่าน', cls:'r-pass'},
@@ -1009,10 +1011,14 @@ function renderSummary(tab){
   const isToday = i => todayChanged(i.gid).has(norm(data[i.gid].rows[i.idx][data[i.gid].f.title]));
   const todayKnown = gids.some(g=>todayByGid[g]);
   const todayCell = arr => todayKnown ? cell(n(arr, isToday), 'r-today') : '<td class="r-today z">…</td>';
-  const t4 = `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${testers.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th><th class="r-today" title="จำนวนข้อที่ผลการทดสอบเปลี่ยนในวันนี้">ทดสอบวันนี้</th>${resHead}</tr></thead><tbody>
-    ${testers.map(p=>{ const pi=items.filter(i=>i.tester===p);
+  // ติ๊ก "เฉพาะคนที่มีรอทดสอบ": แสดงเฉพาะผู้ทดสอบที่ยังมีข้อรอทดสอบมากกว่า 0
+  const shownTesters = onlyPending ? testers.filter(p=>items.some(i=>i.tester===p && i.result==='รอทดสอบ')) : testers;
+  const shownSet = new Set(shownTesters), tItems = onlyPending ? items.filter(i=>shownSet.has(i.tester)) : items;
+  const pendBox = `<label class="pend-chk"><input type="checkbox" data-pending${onlyPending?' checked':''}> แสดงเฉพาะคนที่มีรอทดสอบ</label>`;
+  const t4 = pendBox + `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${shownTesters.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th><th class="r-today" title="จำนวนข้อที่ผลการทดสอบเปลี่ยนในวันนี้">ทดสอบวันนี้</th>${resHead}</tr></thead><tbody>
+    ${shownTesters.map(p=>{ const pi=items.filter(i=>i.tester===p);
       return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${todayCell(pi)}${resCells(pi)}</tr>`; }).join('')}
-    <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(items,i=>i.type===t)}</td>`).join('')}<td>${items.length}</td>${todayCell(items)}${resTotal}</tr></tbody></table>`;
+    <tr class="total"><td>รวมทั้งหมด</td>${types.map(t=>`<td>${n(tItems,i=>i.type===t)}</td>`).join('')}<td>${tItems.length}</td>${todayCell(tItems)}${resCells(tItems)}</tr></tbody></table>`;
 
   return filterBar(tab.name, all, fl, srcSel, cardPicker()) +
     (items.length ? `<div class="cards">
@@ -1020,7 +1026,7 @@ function renderSummary(tab){
         cardShown('system') && card('system', 'c2', 'สรุปตามระบบงานและประเภท', t0),
         cardShown('group') && card('group', 'c1', "สรุปตามกลุ่มและประเภท(จาก What's New)", t1),
         cardShown('type') && card('type', 'c3', 'ผลการทดสอบแยกตามประเภท', t3),
-        cardShown('tester') && card('tester', 'c4 full', `สรุปตามผู้ทดสอบ (${testers.filter(p=>p!==BLANK).length} คน)`, t4),
+        cardShown('tester') && card('tester', 'c4 full', `สรุปตามผู้ทดสอบ (${shownTesters.filter(p=>p!==BLANK).length} คน)`, t4),
       ].filter(Boolean).join('<hr class="card-sep">')}
     </div>` : `<div class="empty">ไม่พบรายการ</div>`) +
     `<script type="x">${items.length}/${all.length}<\/script>`;
@@ -1280,6 +1286,7 @@ function render(){
 
 document.getElementById('main').addEventListener('change', e=>{
   if(e.target.dataset.edit){ saveRosterCell(e.target); return; }
+  if(e.target.hasAttribute('data-pending')){ onlyPending = e.target.checked; memSet('onlyPending', onlyPending); softRender(); return; }
   const pick = e.target.dataset.cardpick;
   if(pick){
     pickedCards = pickedCards.filter(x=>x!==pick);
