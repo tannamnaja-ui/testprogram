@@ -34,6 +34,17 @@ header .spacer{flex:1}
 .edit-link{background:#fde3e1;color:#a3261b;padding:5px 12px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;border:1px solid #f5c2bd}
 .edit-link:hover{background:#fbd3cf}
 .latest{background:#d6f2dd;color:#14532d;font-weight:700;font-size:14px;padding:4px 12px;border-radius:6px;border:1px solid #a7dfb6}
+/* แถบหัว: บรรทัดเดียว ตัวอักษรเล็กลง (จอแคบยังขึ้นบรรทัดใหม่ได้) */
+@media (min-width:601px){
+  header{flex-wrap:nowrap;padding:6px 12px;gap:6px 10px;white-space:nowrap}
+  header h1{font-size:16px;flex-shrink:0}
+  header .meta{font-size:12px}
+  header #status{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+  header .latest{font-size:12px;padding:2px 8px;flex-shrink:0}
+  header .edit-link{font-size:12px;padding:3px 8px;flex-shrink:0}
+  header #reload,header #editorBtn{font-size:12px;padding:3px 8px;flex-shrink:0}
+  header #presence summary{padding:1px 6px}
+}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .latest{background:#1c3a26;color:#a7e8bb;border-color:#2c5a3a}}
 #presence{position:relative;font-size:13px}
 #presence summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
@@ -278,7 +289,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261017.014459';
+const APP_VERSION = '20261017.014643';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
