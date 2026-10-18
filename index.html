@@ -289,7 +289,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261017.014643';
+const APP_VERSION = '20261018.191417';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -1023,7 +1023,11 @@ function renderSummary(tab){
   const todayKnown = gids.some(g=>todayByGid[g]);
   const todayCell = arr => todayKnown ? cell(n(arr, isToday), 'r-today') : '<td class="r-today z">…</td>';
   // ติ๊ก "เฉพาะคนที่มีรอทดสอบ": แสดงเฉพาะผู้ทดสอบที่ยังมีข้อรอทดสอบมากกว่า 0
-  const shownTesters = onlyPending ? testers.filter(p=>items.some(i=>i.tester===p && i.result==='รอทดสอบ')) : testers;
+  // ติ๊กแล้ว: เรียงตามจำนวนรอทดสอบมากไปน้อย ((ไม่ระบุ) ไว้ท้ายสุด) ไม่ติ๊ก: เรียงตามรวมเหมือนเดิม
+  const pendingOf = p => items.filter(i=>i.tester===p && i.result==='รอทดสอบ').length;
+  const shownTesters = onlyPending
+    ? testers.filter(p=>pendingOf(p) > 0).sort((a,b)=>(a===BLANK) - (b===BLANK) || pendingOf(b) - pendingOf(a) || a.localeCompare(b,'th'))
+    : testers;
   const shownSet = new Set(shownTesters), tItems = onlyPending ? items.filter(i=>shownSet.has(i.tester)) : items;
   const pendBox = `<label class="pend-chk"><input type="checkbox" data-pending${onlyPending?' checked':''}> แสดงเฉพาะคนที่มีรอทดสอบ</label>`;
   const t4 = pendBox + `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${shownTesters.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th><th class="r-today" title="จำนวนข้อที่ผลการทดสอบเปลี่ยนในวันนี้">ทดสอบวันนี้</th>${resHead}</tr></thead><tbody>
