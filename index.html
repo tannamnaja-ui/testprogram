@@ -289,7 +289,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261018.191417';
+const APP_VERSION = '20261018.193336';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -936,7 +936,7 @@ function ensureToday(gids){
 // ค่าที่จำไว้ในเบราว์เซอร์ (localStorage) — ถ้าใช้ไม่ได้ก็ทำงานต่อตามปกติ
 function memGet(k){ try{ return JSON.parse(localStorage.getItem('mem:' + k) || 'null'); }catch(e){ return null; } }
 function memSet(k, v){ try{ localStorage.setItem('mem:' + k, JSON.stringify(v)); }catch(e){} }
-let onlyPending = !!memGet('onlyPending');
+let onlyPending = !!memGet('onlyPending'), onlyToday = !!memGet('onlyToday');
 
 const RESULT_BUCKETS = [
   {name:'ทดสอบผ่าน', cls:'r-pass'},
@@ -1023,13 +1023,19 @@ function renderSummary(tab){
   const todayKnown = gids.some(g=>todayByGid[g]);
   const todayCell = arr => todayKnown ? cell(n(arr, isToday), 'r-today') : '<td class="r-today z">…</td>';
   // ติ๊ก "เฉพาะคนที่มีรอทดสอบ": แสดงเฉพาะผู้ทดสอบที่ยังมีข้อรอทดสอบมากกว่า 0
-  // ติ๊กแล้ว: เรียงตามจำนวนรอทดสอบมากไปน้อย ((ไม่ระบุ) ไว้ท้ายสุด) ไม่ติ๊ก: เรียงตามรวมเหมือนเดิม
+  // ติ๊ก "เฉพาะคนที่มีรอทดสอบ": รอทดสอบ > 0 เรียงตามรอทดสอบมากไปน้อย
+  // ติ๊ก "เฉพาะคนที่ทดสอบวันนี้": ทดสอบวันนี้ > 0 เรียงตามทดสอบวันนี้มากไปน้อย (ติ๊กทั้งคู่ = ต้องเข้าทั้ง 2 เงื่อนไข เรียงตามทดสอบวันนี้ก่อน)
+  // ไม่ติ๊กเลย: เรียงตามรวมเหมือนเดิม — (ไม่ระบุ) ไว้ท้ายสุดเสมอ
   const pendingOf = p => items.filter(i=>i.tester===p && i.result==='รอทดสอบ').length;
-  const shownTesters = onlyPending
-    ? testers.filter(p=>pendingOf(p) > 0).sort((a,b)=>(a===BLANK) - (b===BLANK) || pendingOf(b) - pendingOf(a) || a.localeCompare(b,'th'))
-    : testers;
-  const shownSet = new Set(shownTesters), tItems = onlyPending ? items.filter(i=>shownSet.has(i.tester)) : items;
-  const pendBox = `<label class="pend-chk"><input type="checkbox" data-pending${onlyPending?' checked':''}> แสดงเฉพาะคนที่มีรอทดสอบ</label>`;
+  const todayOf = p => items.filter(i=>i.tester===p && isToday(i)).length;
+  let shownTesters = testers;
+  if(onlyPending) shownTesters = shownTesters.filter(p=>pendingOf(p) > 0);
+  if(onlyToday) shownTesters = shownTesters.filter(p=>todayOf(p) > 0);
+  if(onlyPending || onlyToday) shownTesters = shownTesters.slice().sort((a,b)=>(a===BLANK) - (b===BLANK)
+    || (onlyToday ? todayOf(b) - todayOf(a) : 0) || (onlyPending ? pendingOf(b) - pendingOf(a) : 0) || a.localeCompare(b,'th'));
+  const shownSet = new Set(shownTesters), tItems = (onlyPending || onlyToday) ? items.filter(i=>shownSet.has(i.tester)) : items;
+  const pendBox = `<label class="pend-chk"><input type="checkbox" data-pending${onlyPending?' checked':''}> แสดงเฉพาะคนที่มีรอทดสอบ</label>`
+    + `<label class="pend-chk"><input type="checkbox" data-onlytoday${onlyToday?' checked':''}> แสดงเฉพาะคนที่ทดสอบวันนี้</label>`;
   const t4 = pendBox + `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${shownTesters.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th><th class="r-today" title="จำนวนข้อที่ผลการทดสอบเปลี่ยนในวันนี้">ทดสอบวันนี้</th>${resHead}</tr></thead><tbody>
     ${shownTesters.map(p=>{ const pi=items.filter(i=>i.tester===p);
       return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${todayCell(pi)}${resCells(pi)}</tr>`; }).join('')}
@@ -1302,6 +1308,7 @@ function render(){
 document.getElementById('main').addEventListener('change', e=>{
   if(e.target.dataset.edit){ saveRosterCell(e.target); return; }
   if(e.target.hasAttribute('data-pending')){ onlyPending = e.target.checked; memSet('onlyPending', onlyPending); softRender(); return; }
+  if(e.target.hasAttribute('data-onlytoday')){ onlyToday = e.target.checked; memSet('onlyToday', onlyToday); softRender(); return; }
   const pick = e.target.dataset.cardpick;
   if(pick){
     pickedCards = pickedCards.filter(x=>x!==pick);
