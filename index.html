@@ -289,7 +289,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261018.193336';
+const APP_VERSION = '20261018.193903';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -527,7 +527,25 @@ function sortVals(arr, order){
 function countBy(items, key){ const m=new Map(); for(const it of items){ m.set(it[key],(m.get(it[key])||0)+1); } return m; }
 
 // dd/mm/yyyy → yyyy-mm-dd (ใช้เทียบช่วงวันที่)
-function isoDate(s){ const m = norm(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : ''; }
+function isoDate(s){
+  const m = norm(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m) return '';
+  const y = +m[3] > 2400 ? +m[3] - 543 : +m[3]; // ปี พ.ศ. (เช่น 2569) แปลงเป็น ค.ศ.
+  return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+}
+// ค่าจากช่องเลือกวันที่ (yyyy-mm-dd) ถ้าพิมพ์ปีเป็น พ.ศ. ให้แปลงเป็น ค.ศ.
+function isoInput(v){
+  const m = norm(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return '';
+  return `${+m[1] > 2400 ? +m[1] - 543 : m[1]}-${m[2]}-${m[3]}`;
+}
+// ช่วงวันที่ที่ใช้กรอง: ต้องใส่ครบทั้ง 2 ช่อง (ใส่ช่องไหนก่อนก็ได้ ถ้าใส่กลับด้านจะสลับให้)
+function dateRange(fl){
+  let a = isoInput(fl.from), b = isoInput(fl.to);
+  if(!a || !b) return null;
+  if(a > b) [a, b] = [b, a];
+  return [a, b];
+}
 // ข้อนี้มีรูป (ลิงก์ในชีท หรือรูปที่อัปโหลดผ่านระบบ) ให้กดดูได้หรือไม่
 function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.idx).urls.length>0; }
 // ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
@@ -535,11 +553,12 @@ const XE_GIDS = ['653470496', '1356310016', '332727688'];
 function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe'}; }
 
 function applyFilters(items, fl){
+  const range = dateRange(fl);
   const q = fl.q.trim().toLowerCase();
   return items.filter(it =>
     (!fl.group || it.group===fl.group) && (!fl.type || it.type===fl.type) &&
     (!fl.result || it.result===fl.result) && (!fl.tester || it.tester===fl.tester) &&
-    (!fl.from || (it.date && it.date>=fl.from)) && (!fl.to || (it.date && it.date<=fl.to)) &&
+    (!range || (it.date && it.date >= range[0] && it.date <= range[1])) &&
     (!fl.img || hasImage(it)) &&
     (!q || it.text.includes(q)));
 }
