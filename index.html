@@ -208,6 +208,15 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .imgcell .note{font-size:12px;color:var(--muted);word-break:break-word}
 #viewer{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10;display:flex;align-items:center;justify-content:center;padding:16px}
 #viewer[hidden]{display:none}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px}
+.modal[hidden]{display:none}
+.admin-box{background:var(--panel);border-radius:10px;padding:18px 20px;width:min(560px,100%);position:relative}
+.admin-box h2{margin:0 0 10px;font-size:18px}
+.admin-box h3{margin:0 0 4px;font-size:15px}
+.admin-box input[type=password]{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);width:220px}
+.admin-box .close{position:absolute;top:10px;right:10px}
+.admin-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.admin-btn{background:#efe7fb;color:#4b2a8a;border-color:#d6c6f2;font-weight:700}
 #viewer .box{background:var(--panel);border-radius:8px;max-width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;position:relative;padding:12px}
 #viewer .stage{flex:1;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:auto}
 #viewer .stage img{max-width:100%;max-height:calc(100vh - 120px);object-fit:contain}
@@ -273,12 +282,35 @@ a{color:var(--accent)}
   <details id="presence" hidden></details>
   <div id="signin"></div>
   <button id="editorBtn" class="btn-sm" title="ชื่อที่บันทึกเป็นผู้แก้ไขในชีท (กดเพื่อเปลี่ยน)"></button>
-  <a id="sheetLink" class="edit-link" target="_blank" rel="noopener">เปิด Google Sheet เพื่อแก้ไข</a>
   <button id="reload">โหลดข้อมูลใหม่</button>
+  <button id="adminBtn" class="admin-btn" title="สำหรับผู้ดูแลระบบ">⚙ ผู้ดูแลระบบ</button>
 </header>
 <nav id="nav"></nav>
 <main id="main"></main>
 <input type="file" id="fileInput" accept="image/*" multiple hidden>
+<div id="admin" class="modal" hidden>
+  <div class="box admin-box">
+    <button class="close" data-admin-close title="ปิด">✕</button>
+    <h2>ผู้ดูแลระบบ</h2>
+    <div id="adminLogin">
+      <p>กรุณาใส่รหัสผ่านผู้ดูแลระบบ</p>
+      <form id="adminForm"><input type="password" id="adminPass" autocomplete="current-password" placeholder="รหัสผ่าน"> <button type="submit">เข้าสู่ระบบ</button></form>
+      <p id="adminErr" class="err" hidden>รหัสผ่านไม่ถูกต้อง</p>
+    </div>
+    <div id="adminMenu" hidden>
+      <div class="admin-item">
+        <h3>1. นำเข้าข้อใหม่จาก What's New</h3>
+        <p class="meta">เลือกวันที่จากหน้า What's New แล้วนำเข้าข้อใหม่ หรือเลือกวันที่เคยนำเข้าแล้วเพื่อตรวจว่ามีหัวข้อครบหรือยัง</p>
+        <p class="err">⏳ รอกำหนดหน้าเว็บ What's New ที่จะใช้ดึงข้อมูล</p>
+      </div>
+      <div class="admin-item">
+        <h3>2. เปิด Google Sheet เพื่อแก้ไข</h3>
+        <a id="sheetLink" class="edit-link" target="_blank" rel="noopener">เปิด Google Sheet เพื่อแก้ไข</a>
+      </div>
+      <p><button data-admin-logout class="btn-sm">ออกจากระบบผู้ดูแล</button></p>
+    </div>
+  </div>
+</div>
 <div id="viewer" hidden>
   <div class="box">
     <button class="close" title="ปิด">✕</button>
@@ -289,7 +321,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261018.193903';
+const APP_VERSION = '20261021.130442';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -337,6 +369,36 @@ const filters = {};       // tab name -> {group,type,result,tester,q,src}
 try{ Object.assign(filters, JSON.parse(sessionStorage.getItem('filters')||'{}')); sessionStorage.removeItem('filters'); }catch(e){}
 let loadedAt = null;
 
+// ---------- ผู้ดูแลระบบ ----------
+const ADMIN_HASH = 'db1a04c612944960e269f68d4c56b973b5f115f63b6c0f49d0fab11d94ba4aac'; // SHA-256 ของรหัสผ่าน
+async function sha256(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function adminShow(){
+  let ok = false; try{ ok = sessionStorage.getItem('admin') === ADMIN_HASH; }catch(e){}
+  document.getElementById('adminLogin').hidden = ok;
+  document.getElementById('adminMenu').hidden = !ok;
+  document.getElementById('adminErr').hidden = true;
+  document.getElementById('admin').hidden = false;
+  if(!ok) setTimeout(()=>document.getElementById('adminPass').focus(), 0);
+}
+document.getElementById('adminBtn').addEventListener('click', adminShow);
+document.getElementById('adminForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const inp = document.getElementById('adminPass');
+  if(await sha256(inp.value) === ADMIN_HASH){
+    try{ sessionStorage.setItem('admin', ADMIN_HASH); }catch(err){}
+    inp.value = ''; adminShow();
+  }else{
+    document.getElementById('adminErr').hidden = false; inp.select();
+  }
+});
+document.getElementById('admin').addEventListener('click', e=>{
+  if(e.target.id==='admin' || e.target.hasAttribute('data-admin-close')) document.getElementById('admin').hidden = true;
+  if(e.target.hasAttribute('data-admin-logout')){ try{ sessionStorage.removeItem('admin'); }catch(err){} adminShow(); }
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.getElementById('admin').hidden = true; });
 document.getElementById('sheetLink').href = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=750027123#gid=750027123`;
 
 function parseCSV(text){
