@@ -112,6 +112,10 @@ main{padding:16px}
 /* หน้ารายชื่อ: ค้นหา [ช่อง] [ล้าง] แสดง n จาก n รายการ ในแถวเดียว */
 .filters .qline{display:flex;align-items:center;gap:8px;flex:0 0 auto;font-size:14px;color:var(--muted)}
 .filters .qline input{min-width:120px;width:200px}
+.filters .qline .imgchk input{min-width:0;width:auto}
+/* หน้ารายชื่อ: ข้อความแจ้งเตือนอยู่บรรทัดใหม่ใต้แถบค้นหา */
+.filters:has(.qline){flex-wrap:wrap}
+.filters .qline + .roster-note{flex:1 1 100%;align-self:auto}
 .filters .qline button{padding:4px 12px;white-space:nowrap}
 .filters .qline b{color:var(--text);white-space:nowrap;margin-left:6px}
 .filters:has(.qline){align-items:center}
@@ -125,6 +129,8 @@ main{padding:16px}
   .filters .qrow input[type=search]{min-width:80px;width:150px}
   .filters .fldhead b{font-size:12px}
   .filters .roster-note{flex:1 1 300px;min-width:200px}
+  .filters:has(.qline){flex-wrap:wrap}
+  .filters .qline + .roster-note{flex:1 1 100%}
 }
 .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 230px)}
 table{border-collapse:collapse;width:100%}
@@ -340,7 +346,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.152656';
+const APP_VERSION = '20261021.153855';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
