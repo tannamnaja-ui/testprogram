@@ -696,7 +696,7 @@ function wnSheet() {
   const heads = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(h => String(h).trim());
   const col = (re, fallback) => { const i = heads.findIndex(h => re.test(h)); return i >= 0 ? i : fallback; };
   return { sh, heads, c: {
-    no: col(/^ลำดับ/, 0), date: col(/^วันที่/, -1), release: col(/^Release/i, -1), group: col(/^กลุ่ม/, -1), type: col(/^ประเภท/, -1),
+    no: col(/^ลำดับ/, 0), date: col(/^วันที่/, -1), release: col(/^Release/i, -1), group: col(/^กลุ่ม/, -1), system: col(/^ระบบงาน/, -1), type: col(/^ประเภท/, -1),
     title: col(/^หัวข้อ/, -1), summary: col(/^รายละเอียดย่อ/, -1), module: col(/^โมดูล/, -1), cause: col(/^ปัญหาที่พบ/, -1),
     fix: col(/^สิ่งที่แก้ไข/, -1), test: col(/^วิธีตรวจสอบ/, -1), media: col(/^ภาพ/, -1) } };
 }
@@ -707,7 +707,7 @@ function v4Titles() {
 }
 
 // นำเข้าข้อที่หน้าเว็บส่งมา (ของวันที่เดียว): เพิ่มต่อท้ายแท็บ HOSxP V4 รันเลขลำดับต่อ ข้ามข้อที่หัวข้อมีอยู่แล้ว
-// p = { date, editor, entries: [{ title, release, group, kind, summary, module, cause, fix, test, files }], media: [{ title, files }] }
+// p = { date, editor, entries: [{ title, release, group, system, kind, summary, module, cause, fix, test, files }], media: [{ title, files }] }
 function wnImport(p) {
   const date = String(p.date || '');
   if (!/^\d{4}-\d\d-\d\d$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
@@ -734,7 +734,7 @@ function wnImport(p) {
       const set = (k, v) => { if (c[k] >= 0) r[c[k]] = String(v || ''); };
       if (c.no >= 0) r[c.no] = ++no;
       if (c.date >= 0) r[c.date] = dateVal;
-      set('release', x.release); set('group', x.group); set('type', x.kind);
+      set('release', x.release); set('group', x.group); set('system', x.system); set('type', x.kind);
       set('title', title); set('summary', x.summary); set('module', x.module);
       set('cause', x.cause); set('fix', x.fix); set('test', x.test);
       rows.push(r);

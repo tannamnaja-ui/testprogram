@@ -219,6 +219,7 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .wn-list th,.wn-list td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
 .wn-list th{position:sticky;top:0;background:var(--head)}
 .wn-list tr.exists td{color:var(--muted)}
+.wn-list select{font:inherit;font-size:12.5px;max-width:230px;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--text)}
 .wn-list .tag{display:inline-block;border-radius:10px;padding:0 8px;font-size:12px;white-space:nowrap}
 .wn-list .tag.new{background:var(--ok-bg);color:var(--ok)}
 .wn-list .tag.old{background:var(--wait-bg);color:var(--wait)}
@@ -335,7 +336,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.141155';
+const APP_VERSION = '20261021.142805';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -531,6 +532,55 @@ async function wnLoadDates(){
     wnDatesLoaded = true;
   }catch(e){ sel.innerHTML = `<option value="">${esc(e.message)}</option>`; }
 }
+// เดาระบบงานของข้อใหม่จากข้อที่มีในชีทแล้ว: เทียบตัวอักษร 2–3 ตัวติดกันของโมดูล/หัวข้อ/รายละเอียดย่อ/กลุ่ม
+// กับ 8 ข้อที่คล้ายที่สุด แล้วเพิ่มคะแนนให้ระบบงานที่ชื่ออยู่ในโมดูลหรือหัวข้อ (ทดสอบกับข้อเดิมในชีท เดาถูกราว 77%)
+let wnSys = null;
+async function wnSysModel(){
+  if(wnSys) return wnSys;
+  const [res, o] = await Promise.all([
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=653470496&_=${Date.now()}`, {cache:'no-store'}),
+    jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid:'653470496'}), 60000)]);
+  const g = parseCSV(await res.text()), h = (g[0] || []).map(x=>String(x).trim());
+  const at = re => h.findIndex(x=>re.test(x));
+  const cs = at(/^ระบบงาน/), cm = at(/^โมดูล/), ct = at(/^หัวข้อ/), cd = at(/^รายละเอียดย่อ/), cg = at(/^กลุ่ม/);
+  const opts = (((o && o.cols) || {})[cs + 1] || []).map(x=>String(x).trim()).filter(String);
+  const cur = new Map();
+  if(cs < 0 || !opts.length) return wnSys = { opts, cur, guess: ()=>'' };
+  // ชื่อระบบงานเดิมที่เปลี่ยนชื่อไปแล้ว: เทียบจากข้อความในวงเล็บ
+  const paren = x=>(x.match(/\(.*\)/) || [''])[0];
+  const toOpt = v=>{ v = v.trim(); if(opts.includes(v)) return v; const p = paren(v); return (p && opts.find(x=>paren(x)===p)) || ''; };
+  const feat = (module, title, summary, group)=>{
+    const f = {};
+    [[module, 3], [title, 2], [summary, 1], [group, 1]].forEach(([t, w])=>{
+      const x = String(t || '').toLowerCase().replace(/\s+/g, ' ');
+      for(let n = 2; n <= 3; n++) for(let i = 0; i + n <= x.length; i++){ const k = x.substr(i, n); f[k] = (f[k] || 0) + w; }
+    });
+    return f;
+  };
+  const train = [];
+  g.slice(1).forEach(r=>{
+    const title = String(r[ct] || '').trim();
+    if(title) cur.set(title, String(r[cs] || '').trim());
+    const y = toOpt(String(r[cs] || ''));
+    if(y) train.push({ y, f: feat(r[cm], r[ct], r[cd], r[cg]) });
+  });
+  const df = {}, N = train.length;
+  train.forEach(d=>{ for(const k in d.f) df[k] = (df[k] || 0) + 1; });
+  const vec = f=>{ const v = {}; let n = 0; for(const k in f){ const w = f[k] * Math.log((N + 1) / ((df[k] || 0) + 1)); v[k] = w; n += w * w; } n = Math.sqrt(n) || 1; for(const k in v) v[k] /= n; return v; };
+  train.forEach(d=>d.v = vec(d.f));
+  const cos = (a, b)=>{ let x = 0; for(const k in a) if(b[k]) x += a[k] * b[k]; return x; };
+  const words = {};
+  opts.forEach(x=>words[x] = x.replace(/^ระบบงาน|^ระบบ/, '').split(/[()\/,]| และ /).map(w=>w.trim().toLowerCase()).filter(w=>w.length >= 3));
+  const guess = row=>{
+    if(!N) return '';
+    const v = vec(feat(row.module, row.title, row.summary, row.group)), sc = {};
+    train.map(d=>[cos(v, d.v), d.y]).sort((a, b)=>b[0] - a[0]).slice(0, 8).forEach(([x, y])=>sc[y] = (sc[y] || 0) + x);
+    const text = (row.module + ' ' + row.title).toLowerCase();
+    opts.forEach(x=>{ if(words[x].some(w=>text.includes(w))) sc[x] = (sc[x] || 0) + 0.6; });
+    return (Object.entries(sc).sort((a, b)=>b[1] - a[1])[0] || [''])[0];
+  };
+  return wnSys = { opts, cur, guess };
+}
 async function wnLoadDay(){
   const date = document.getElementById('wnDate').value, list = document.getElementById('wnList'), btn = document.getElementById('wnImportBtn'), msg = document.getElementById('wnMsg');
   wnItems = []; btn.disabled = true; msg.textContent = '';
@@ -539,16 +589,18 @@ async function wnLoadDay(){
   try{
     const t = await jsonp(UPLOAD_URL + '?action=wntitles', 60000);
     if(!t.ok || !t.titles) throw new Error(t.error || 'Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์แล้ว Deploy เป็นเวอร์ชันใหม่');
-    const titles = new Set(t.titles), media = wnMedia(wnSrc, date);
+    const titles = new Set(t.titles), media = wnMedia(wnSrc, date), sys = await wnSysModel();
     wnItems = wnIdx.filter(e=>e.date === date).map(e=>{
       const x = wnEntryAt(wnSrc, e.pos), d = x.detail || {}, files = media[e.id] || [], title = x.title.trim();
       return { id: e.id, title, exists: titles.has(title), images: files.filter(f=>!f.video).length, videos: files.filter(f=>f.video).length,
         row: { title, release: x.release || '', group: WN_GROUP[x.category] || x.category || '', kind: WN_KIND[x.kind] || x.kind || '',
           summary: x.summary || '', module: x.module || '', cause: d.cause || '', fix: wnFixText(d), test: wnTestText(d), files } };
     });
+    wnItems.forEach(x=>x.row.system = x.exists ? '' : sys.guess(x.row));
     const fresh = wnItems.filter(x=>!x.exists).length;
-    list.innerHTML = `<table><thead><tr><th><input type="checkbox" id="wnAll" ${fresh?'checked':'disabled'} title="เลือกทั้งหมด"></th><th>หัวข้อ</th><th>กลุ่ม</th><th>ประเภท</th><th>ภาพ</th><th>ในชีท</th></tr></thead><tbody>${
-      wnItems.map((x,i)=>`<tr class="${x.exists?'exists':''}"><td><input type="checkbox" data-wn="${i}" ${x.exists?'disabled':'checked'}></td><td>${esc(x.title)}</td><td>${esc(x.row.group)}</td><td>${esc(x.row.kind)}</td>
+    list.innerHTML = `<table><thead><tr><th><input type="checkbox" id="wnAll" ${fresh?'checked':'disabled'} title="เลือกทั้งหมด"></th><th>หัวข้อ</th><th>กลุ่ม</th><th>ระบบงาน <span class="meta">(ระบบเดาให้ แก้ได้)</span></th><th>ประเภท</th><th>ภาพ</th><th>ในชีท</th></tr></thead><tbody>${
+      wnItems.map((x,i)=>`<tr class="${x.exists?'exists':''}"><td><input type="checkbox" data-wn="${i}" ${x.exists?'disabled':'checked'}></td><td>${esc(x.title)}</td><td>${esc(x.row.group)}</td><td>${x.exists ? esc(sys.cur.get(x.title) || '') : sys.opts.length
+        ? `<select data-sys="${i}"><option value="">(ไม่ระบุ)</option>${sys.opts.map(o=>`<option${o===x.row.system?' selected':''}>${esc(o)}</option>`).join('')}</select>` : ''}</td><td>${esc(x.row.kind)}</td>
         <td>${x.images}${x.videos ? ' + วิดีโอ ' + x.videos : ''}</td><td>${x.exists ? '<span class="tag old">มีแล้ว</span>' : '<span class="tag new">ยังไม่มี</span>'}</td></tr>`).join('')}</tbody></table>`;
     msg.textContent = `ทั้งหมด ${wnItems.length} ข้อ · มีในชีทแล้ว ${wnItems.length - fresh} · ยังไม่มี ${fresh}`;
     wnUpdateBtn();
@@ -561,6 +613,7 @@ function wnUpdateBtn(){
 }
 document.getElementById('wnDate').addEventListener('change', wnLoadDay);
 document.getElementById('wnList').addEventListener('change', e=>{
+  if(e.target.dataset.sys) { wnItems[+e.target.dataset.sys].row.system = e.target.value; return; }
   if(e.target.id==='wnAll') document.querySelectorAll('#wnList input[data-wn]:not(:disabled)').forEach(c=>c.checked = e.target.checked);
   wnUpdateBtn();
 });
@@ -586,6 +639,7 @@ document.getElementById('wnImportBtn').addEventListener('click', async ()=>{
     const a = out.added;
     msg.textContent = a.length ? `✓ นำเข้าแล้ว ${a.length} ข้อ (ลำดับ ${a[0].no}–${a[a.length-1].no})${out.skipped ? ' · ข้ามที่มีอยู่แล้ว ' + out.skipped : ''}` : 'ไม่มีข้อใหม่ให้นำเข้า';
     driveLoadedAt = 0;      // ให้ปุ่มดูรูปโหลดภาพใหม่
+    wnSys = null;           // เรียนรู้ระบบงานจากข้อที่เพิ่งนำเข้าด้วย
     loadAll();              // โหลดข้อมูลชีทใหม่
     const keep = msg.textContent; await wnLoadDay(); msg.textContent = keep;
   }catch(e){ alert('นำเข้าไม่สำเร็จ: ' + e.message); wnUpdateBtn(); }
