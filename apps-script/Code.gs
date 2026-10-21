@@ -916,3 +916,11 @@ function wnMediaList() {
   for (const key in store) store[key].forEach((url, i) => out.push({ id: '', url, key, name: 'whatsnew ' + (i + 1), created: i }));
   return out;
 }
+
+// ---------- ขอสิทธิ์ (รันครั้งเดียวจากหน้าแก้โค้ด Apps Script) ----------
+// เลือกฟังก์ชัน authorize ที่แถบด้านบน แล้วกด "เรียกใช้ (Run)" > อนุญาตสิทธิ์ทั้งหมด
+// จำเป็นสำหรับการนำเข้าจาก What's New (ต้องเปิดหน้าเว็บภายนอกด้วย UrlFetchApp)
+function authorize() {
+  const code = UrlFetchApp.fetch(WN_SITE + '/', { muteHttpExceptions: true }).getResponseCode();
+  Logger.log('What\'s New: HTTP ' + code + ' | โฟลเดอร์รูป: ' + getFolder().getName() + ' | ชีท: ' + SpreadsheetApp.openById(SPREADSHEET_ID).getName());
+}
