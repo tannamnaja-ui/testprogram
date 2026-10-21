@@ -751,6 +751,9 @@ function wnImport(p) {
       }
       sh.getRange(start, 1, rows.length, lastCol).setValues(rows);
       if (c.media >= 0) sh.getRange(start, c.media + 1, rows.length, 1).setRichTextValues(mediaCells.map(v => [v]));
+      // ตัดข้อความขึ้นบรรทัดใหม่ให้พอดีกับความกว้างคอลัมน์ แล้วปรับความสูงแถวตามข้อความ
+      sh.getRange(start, 1, rows.length, lastCol).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+      sh.autoResizeRows(start, rows.length);
       added.forEach((a, i) => noteEditor(sh.getRange(start + i, (c.title >= 0 ? c.title : 0) + 1), p.editor || 'ผู้ดูแลระบบ (นำเข้าจาก What\'s New)', 'นำเข้าจาก What\'s New'));
     }
     // ให้ปุ่ม "ดูรูป" ในหน้าเว็บแสดงภาพของทุกข้อในวันนั้น (ทั้งข้อใหม่และข้อที่มีอยู่แล้ว)
