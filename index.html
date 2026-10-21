@@ -212,6 +212,10 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .modal[hidden]{display:none}
 .admin-box{background:var(--panel);border-radius:10px;padding:18px 20px;width:min(820px,100%);position:relative;max-height:calc(100vh - 80px);overflow:auto}
 .wn-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:6px 0}
+#wnImportBtn{font-size:15px;font-weight:700;padding:8px 22px;border:0;background:#d93025;color:#fff}
+#wnImportBtn:hover{background:#b3261e}
+#wnImportBtn:disabled{background:var(--line);color:var(--muted);cursor:default}
+#wnImportBtn.done,#wnImportBtn.done:disabled{background:#1e8e3e;color:#fff}
 .wn-row select{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}
 .wn-list{max-height:45vh;overflow:auto;border:1px solid var(--line);border-radius:6px;margin:6px 0}
 .wn-list:empty{display:none}
@@ -336,7 +340,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.151317';
+const APP_VERSION = '20261021.152134';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -609,6 +613,7 @@ async function wnLoadDay(){
 function wnSelected(){ return [...document.querySelectorAll('#wnList input[data-wn]:checked')].map(c=>wnItems[+c.dataset.wn]); }
 function wnUpdateBtn(){
   const n = wnSelected().length, btn = document.getElementById('wnImportBtn');
+  btn.classList.remove('done');
   btn.disabled = !n; btn.textContent = n ? `นำเข้า ${n} ข้อที่เลือก` : 'นำเข้าข้อที่เลือก';
 }
 document.getElementById('wnDate').addEventListener('change', wnLoadDay);
@@ -642,6 +647,8 @@ document.getElementById('wnImportBtn').addEventListener('click', async ()=>{
     wnSys = null;           // เรียนรู้ระบบงานจากข้อที่เพิ่งนำเข้าด้วย
     loadAll();              // โหลดข้อมูลชีทใหม่
     const keep = msg.textContent; await wnLoadDay(); msg.textContent = keep;
+    // นำเข้าเสร็จ: ปุ่มเป็นสีเขียว (กลับเป็นปุ่มนำเข้าเมื่อเลือกข้อหรือวันที่ใหม่)
+    btn.classList.add('done'); btn.disabled = true; btn.textContent = a.length ? `✓ นำเข้าเสร็จแล้ว ${a.length} ข้อ` : '✓ ไม่มีข้อใหม่ให้นำเข้า';
   }catch(e){ alert('นำเข้าไม่สำเร็จ: ' + e.message); wnUpdateBtn(); }
 });
 document.getElementById('adminBtn').addEventListener('click', adminShow);
