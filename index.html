@@ -335,7 +335,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.131756';
+const APP_VERSION = '20261021.132049';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -407,7 +407,8 @@ async function wnLoadDates(){
   const sel = document.getElementById('wnDate');
   try{
     const out = await jsonp(UPLOAD_URL + '?action=wndates', 120000);
-    if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับ กรุณาอัปเดตสคริปต์');
+    if(!out.ok) throw new Error(out.error);
+    if(!out.dates) throw new Error('Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์แล้ว Deploy เป็นเวอร์ชันใหม่');
     sel.innerHTML = '<option value="">เลือกวันที่…</option>' + out.dates.map(d=>`<option value="${d.date}">${thDate(d.date)} (${d.count} ข้อ)</option>`).join('');
     wnDatesLoaded = true;
   }catch(e){ sel.innerHTML = `<option value="">โหลดรายการวันที่ไม่สำเร็จ: ${esc(e.message)}</option>`; }
@@ -420,6 +421,7 @@ async function wnLoadDay(){
   try{
     const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'wnday', date}), 120000);
     if(!out.ok) throw new Error(out.error);
+    if(!out.items) throw new Error('Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์');
     wnItems = out.items;
     const fresh = wnItems.filter(x=>!x.exists).length;
     list.innerHTML = `<table><thead><tr><th><input type="checkbox" id="wnAll" ${fresh?'checked':'disabled'} title="เลือกทั้งหมด"></th><th>หัวข้อ</th><th>กลุ่ม</th><th>ประเภท</th><th>ภาพ</th><th>ในชีท</th></tr></thead><tbody>${
