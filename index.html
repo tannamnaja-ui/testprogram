@@ -210,7 +210,18 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 #viewer[hidden]{display:none}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px}
 .modal[hidden]{display:none}
-.admin-box{background:var(--panel);border-radius:10px;padding:18px 20px;width:min(560px,100%);position:relative}
+.admin-box{background:var(--panel);border-radius:10px;padding:18px 20px;width:min(820px,100%);position:relative;max-height:calc(100vh - 80px);overflow:auto}
+.wn-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:6px 0}
+.wn-row select{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}
+.wn-list{max-height:45vh;overflow:auto;border:1px solid var(--line);border-radius:6px;margin:6px 0}
+.wn-list:empty{display:none}
+.wn-list table{width:100%;border-collapse:collapse;font-size:13.5px}
+.wn-list th,.wn-list td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+.wn-list th{position:sticky;top:0;background:var(--head)}
+.wn-list tr.exists td{color:var(--muted)}
+.wn-list .tag{display:inline-block;border-radius:10px;padding:0 8px;font-size:12px;white-space:nowrap}
+.wn-list .tag.new{background:var(--ok-bg);color:var(--ok)}
+.wn-list .tag.old{background:var(--wait-bg);color:var(--wait)}
 .admin-box h2{margin:0 0 10px;font-size:18px}
 .admin-box h3{margin:0 0 4px;font-size:15px}
 .admin-box input[type=password]{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);width:220px}
@@ -301,7 +312,10 @@ a{color:var(--accent)}
       <div class="admin-item">
         <h3>1. นำเข้าข้อใหม่จาก What's New</h3>
         <p class="meta">เลือกวันที่จากหน้า What's New แล้วนำเข้าข้อใหม่ หรือเลือกวันที่เคยนำเข้าแล้วเพื่อตรวจว่ามีหัวข้อครบหรือยัง</p>
-        <p class="err">⏳ รอกำหนดหน้าเว็บ What's New ที่จะใช้ดึงข้อมูล</p>
+        <div class="wn-row"><label>วันที่บนหน้า What's New <select id="wnDate"><option value="">กำลังโหลดรายการวันที่…</option></select></label>
+          <a href="https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/" target="_blank" rel="noopener" class="meta">เปิดหน้า What's New</a></div>
+        <div id="wnList" class="wn-list"></div>
+        <div class="wn-row"><button id="wnImportBtn" disabled>นำเข้าข้อที่เลือก</button> <span id="wnMsg" class="meta"></span></div>
       </div>
       <div class="admin-item">
         <h3>2. เปิด Google Sheet เพื่อแก้ไข</h3>
@@ -321,7 +335,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.130442';
+const APP_VERSION = '20261021.131756';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -382,13 +396,70 @@ function adminShow(){
   document.getElementById('adminErr').hidden = true;
   document.getElementById('admin').hidden = false;
   if(!ok) setTimeout(()=>document.getElementById('adminPass').focus(), 0);
+  if(ok) wnLoadDates();
 }
+// ---- นำเข้าข้อใหม่จาก What's New (ทีละวันที่ ไม่ตรวจย้อนหลังทั้งหมด) ----
+const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const thDate = iso => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${TH_MON[m-1]} ${y + 543}`; };
+let wnItems = [], wnDatesLoaded = false;
+async function wnLoadDates(){
+  if(wnDatesLoaded || !UPLOAD_URL) return;
+  const sel = document.getElementById('wnDate');
+  try{
+    const out = await jsonp(UPLOAD_URL + '?action=wndates', 120000);
+    if(!out.ok) throw new Error(out.error || 'Apps Script ยังไม่รองรับ กรุณาอัปเดตสคริปต์');
+    sel.innerHTML = '<option value="">เลือกวันที่…</option>' + out.dates.map(d=>`<option value="${d.date}">${thDate(d.date)} (${d.count} ข้อ)</option>`).join('');
+    wnDatesLoaded = true;
+  }catch(e){ sel.innerHTML = `<option value="">โหลดรายการวันที่ไม่สำเร็จ: ${esc(e.message)}</option>`; }
+}
+async function wnLoadDay(){
+  const date = document.getElementById('wnDate').value, list = document.getElementById('wnList'), btn = document.getElementById('wnImportBtn'), msg = document.getElementById('wnMsg');
+  wnItems = []; btn.disabled = true; msg.textContent = '';
+  if(!date){ list.innerHTML = ''; return; }
+  list.innerHTML = '<p class="meta" style="padding:8px">กำลังอ่านข้อของวันที่ ' + thDate(date) + ' และตรวจกับชีท HOSxP V4…</p>';
+  try{
+    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'wnday', date}), 120000);
+    if(!out.ok) throw new Error(out.error);
+    wnItems = out.items;
+    const fresh = wnItems.filter(x=>!x.exists).length;
+    list.innerHTML = `<table><thead><tr><th><input type="checkbox" id="wnAll" ${fresh?'checked':'disabled'} title="เลือกทั้งหมด"></th><th>หัวข้อ</th><th>กลุ่ม</th><th>ประเภท</th><th>ภาพ</th><th>ในชีท</th></tr></thead><tbody>${
+      wnItems.map((x,i)=>`<tr class="${x.exists?'exists':''}"><td><input type="checkbox" data-wn="${i}" ${x.exists?'disabled':'checked'}></td><td>${esc(x.title)}</td><td>${esc(x.group)}</td><td>${esc(x.kind)}</td>
+        <td>${x.images}${x.videos ? ' + วิดีโอ ' + x.videos : ''}</td><td>${x.exists ? '<span class="tag old">มีแล้ว</span>' : '<span class="tag new">ยังไม่มี</span>'}</td></tr>`).join('')}</tbody></table>`;
+    msg.textContent = `ทั้งหมด ${wnItems.length} ข้อ · มีในชีทแล้ว ${wnItems.length - fresh} · ยังไม่มี ${fresh}`;
+    wnUpdateBtn();
+  }catch(e){ list.innerHTML = `<p class="err" style="padding:8px">อ่านข้อมูลไม่สำเร็จ: ${esc(e.message)}</p>`; }
+}
+function wnSelected(){ return [...document.querySelectorAll('#wnList input[data-wn]:checked')].map(c=>wnItems[+c.dataset.wn]); }
+function wnUpdateBtn(){
+  const n = wnSelected().length, btn = document.getElementById('wnImportBtn');
+  btn.disabled = !n; btn.textContent = n ? `นำเข้า ${n} ข้อที่เลือก` : 'นำเข้าข้อที่เลือก';
+}
+document.getElementById('wnDate').addEventListener('change', wnLoadDay);
+document.getElementById('wnList').addEventListener('change', e=>{
+  if(e.target.id==='wnAll') document.querySelectorAll('#wnList input[data-wn]:not(:disabled)').forEach(c=>c.checked = e.target.checked);
+  wnUpdateBtn();
+});
+document.getElementById('wnImportBtn').addEventListener('click', async ()=>{
+  const sel = wnSelected(), date = document.getElementById('wnDate').value, btn = document.getElementById('wnImportBtn'), msg = document.getElementById('wnMsg');
+  if(!sel.length || !confirm(`นำเข้า ${sel.length} ข้อ ของวันที่ ${thDate(date)} ต่อท้ายแท็บ HOSxP V4 ใช่หรือไม่?`)) return;
+  let pw = ''; try{ pw = sessionStorage.getItem('adminpw') || ''; }catch(e){}
+  btn.disabled = true; btn.textContent = 'กำลังนำเข้า… (อาจใช้เวลาครึ่งนาที)';
+  try{
+    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'wnimport', date, ids: sel.map(x=>x.id).join(','), pw, editor: editorLabel()}), 300000);
+    if(!out.ok) throw new Error(out.error);
+    const a = out.added;
+    msg.textContent = a.length ? `✓ นำเข้าแล้ว ${a.length} ข้อ (ลำดับ ${a[0].no}–${a[a.length-1].no})${out.skipped ? ' · ข้ามที่มีอยู่แล้ว ' + out.skipped : ''}` : 'ไม่มีข้อใหม่ให้นำเข้า';
+    driveLoadedAt = 0;      // ให้ปุ่มดูรูปโหลดภาพใหม่
+    loadAll();              // โหลดข้อมูลชีทใหม่
+    const keep = msg.textContent; await wnLoadDay(); msg.textContent = keep;
+  }catch(e){ alert('นำเข้าไม่สำเร็จ: ' + e.message); wnUpdateBtn(); }
+});
 document.getElementById('adminBtn').addEventListener('click', adminShow);
 document.getElementById('adminForm').addEventListener('submit', async e=>{
   e.preventDefault();
   const inp = document.getElementById('adminPass');
   if(await sha256(inp.value) === ADMIN_HASH){
-    try{ sessionStorage.setItem('admin', ADMIN_HASH); }catch(err){}
+    try{ sessionStorage.setItem('admin', ADMIN_HASH); sessionStorage.setItem('adminpw', inp.value); }catch(err){}
     inp.value = ''; adminShow();
   }else{
     document.getElementById('adminErr').hidden = false; inp.select();
@@ -1153,15 +1224,16 @@ function rowMedia(gid, idx){
   const {urls, note} = mediaOf(t.rows[idx][t.f.image]);
   const seen = new Set(urls.map(driveId).filter(Boolean));
   for(const f of driveFiles[rowKey(gid, idx)] || []){
+    if(f.url){ if(!urls.includes(f.url)) urls.push(f.url); continue; } // ภาพจาก What's New
     if(!seen.has(f.id)){ seen.add(f.id); urls.push(`https://drive.google.com/file/d/${f.id}/view`); }
   }
   return {urls, note};
 }
-function jsonp(url){
+function jsonp(url, timeoutMs = 30000){
   return new Promise((resolve, reject)=>{
     const cb = 'jp' + Date.now() + Math.floor(Math.random()*1e6), s = document.createElement('script');
     const done = ()=>{ delete window[cb]; s.remove(); clearTimeout(timer); };
-    const timer = setTimeout(()=>{ done(); reject(new Error('หมดเวลารอรายการรูป')); }, 30000);
+    const timer = setTimeout(()=>{ done(); reject(new Error('หมดเวลารอคำตอบจาก Apps Script')); }, timeoutMs);
     window[cb] = d=>{ done(); resolve(d); };
     s.onerror = ()=>{ done(); reject(new Error('โหลดรายการรูปไม่สำเร็จ')); };
     s.src = url + (url.includes('?')?'&':'?') + 'callback=' + cb + '&_=' + Date.now();
