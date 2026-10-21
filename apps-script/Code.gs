@@ -25,24 +25,19 @@ const KEY_PREFIX = 'row:';
 const GOOGLE_CLIENT_ID = '';
 const PRESENCE_TTL_MS = 150 * 1000; // ไม่ส่งสัญญาณเกินเวลานี้ = ออกไปแล้ว (หน้าเว็บส่งทุก 60 วินาที)
 
+// GET ?action=wntitles → หัวข้อทั้งหมดในแท็บ HOSxP V4 · POST {action:'wnimport'} → นำเข้าจาก What's New · GET ?action=wnjob&job=... → ผลการนำเข้า
 // GET ?action=list → รายการรูปทั้งหมดพร้อมข้อที่อัปโหลด
 // GET ?action=ping&vid=... → แจ้งว่ายังเปิดดูอยู่ และรับรายชื่อผู้ที่กำลังดู
 // (ทุก action รองรับ ?callback= แบบ JSONP)
 function doGet(e) {
   const prm = (e && e.parameter) || {};
   let out;
-  if (prm.action === 'wndates') {
-    try {
-      const counts = {};
-      wnIndex(wnSource()).forEach(e => counts[e.date] = (counts[e.date] || 0) + 1);
-      out = { ok: true, dates: Object.keys(counts).sort().reverse().map(d => ({ date: d, count: counts[d] })) };
-    } catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
-  } else if (prm.action === 'wnday') {
-    try { out = { ok: true, items: wnDay(String(prm.date || '')) }; }
+  if (prm.action === 'wntitles') {
+    try { out = { ok: true, titles: Array.from(v4Titles()) }; }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
-  } else if (prm.action === 'wnimport') {
-    try { checkAdmin(prm.pw); out = wnImport(String(prm.date || ''), String(prm.ids || '').split(',').filter(String), prm.editor); }
-    catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+  } else if (prm.action === 'wnjob') {
+    const r = CacheService.getScriptCache().get('wnjob:' + String(prm.job || ''));
+    out = r ? JSON.parse(r) : { ok: true, pending: true };
   } else if (prm.action === 'setitem') {
     try { out = setItemCell(JSON.parse(prm.p || '{}')); }
     catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
@@ -592,6 +587,14 @@ function doPost(e) {
   try {
     const body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : null;
     if (body && body.action === 'setitem') return reply(setItemCell(body));
+    if (body && body.action === 'wnimport') {
+      // ส่งแบบ no-cors จึงอ่านคำตอบไม่ได้ เก็บผลไว้ให้หน้าเว็บถามด้วย ?action=wnjob&job=...
+      let out;
+      try { checkAdmin(body.pw); out = wnImport(body); }
+      catch (err) { out = { ok: false, error: String((err && err.message) || err) }; }
+      if (body.job) CacheService.getScriptCache().put('wnjob:' + body.job, JSON.stringify(out), 600);
+      return reply(out);
+    }
   } catch (err) {
     return reply({ ok: false, error: String((err && err.message) || err) });
   }
@@ -676,135 +679,15 @@ function reply(o, callback) {
 }
 
 // ---------- นำเข้าข้อใหม่จาก What's New (ใช้เฉพาะผู้ดูแลระบบ) ----------
-// หน้า What's New เก็บข้อมูลทุกข้อไว้ในไฟล์ JavaScript ของหน้าเว็บ (assets/WhatsNew-*.js) — อ่านได้โดยไม่ต้องล็อกอิน
-const WN_SITE = 'https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th';
+// หน้า What's New ไม่ให้เซิร์ฟเวอร์ของ Google เข้าอ่าน (ตอบ 403) หน้าเว็บจึงอ่านและจัดรูปแบบข้อความเอง
+// (ผ่าน server.ps1 บนเครื่องในองค์กร) แล้วส่งข้อที่จะนำเข้ามาให้สคริปต์นี้บันทึกลงชีท
 const WN_TARGET_GID = '653470496'; // แท็บ HOSxP V4
 const ADMIN_HASH = 'db1a04c612944960e269f68d4c56b973b5f115f63b6c0f49d0fab11d94ba4aac'; // SHA-256 ของรหัสผ่านผู้ดูแลระบบ
-const WN_GROUP = { clinic: 'คลินิก', pharmacy: 'เภสัชกรรม', finance: 'การเงิน', export: 'ส่งออก/ส่งเบิก', api: 'เชื่อมต่อระบบอื่น', system: 'ระบบภายใน' };
-const WN_KIND = { feature: 'ของใหม่', improvement: 'ปรับปรุง', fix: 'แก้ไข' };
 
 function checkAdmin(pw) {
   const hex = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(pw || ''), Utilities.Charset.UTF_8)
     .map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
   if (hex !== ADMIN_HASH) throw new Error('รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง');
-}
-
-// โหลดไฟล์ข้อมูลของหน้า What's New (ชื่อไฟล์เปลี่ยนทุกครั้งที่เว็บอัปเดต จึงหาจากหน้าแรก)
-function wnSource() {
-  const get = u => UrlFetchApp.fetch(u, { muteHttpExceptions: true, followRedirects: true }).getContentText();
-  const indexHtml = get(WN_SITE + '/');
-  const main = (indexHtml.match(/assets\/index-[\w-]+\.js/) || [])[0];
-  if (!main) throw new Error('อ่านหน้า What\'s New ไม่ได้');
-  const chunk = (get(WN_SITE + '/' + main).match(/assets\/WhatsNew-[\w-]+\.js/) || [])[0];
-  if (!chunk) throw new Error('ไม่พบไฟล์ข้อมูล What\'s New');
-  return get(WN_SITE + '/' + chunk);
-}
-
-// รายการย่อ (id, วันที่, หัวข้อ) ของทุกข้อ — อ่านเร็ว ไม่ต้องแปลงทั้งก้อน
-function wnIndex(src) {
-  const re = /\{id:`([^`]+)`,date:`(\d{4}-\d\d-\d\d)`,title:`((?:\\`|[^`])*)`/g;
-  const out = [];
-  let m;
-  while ((m = re.exec(src))) out.push({ id: m[1], date: m[2], title: unTpl(m[3]).trim(), pos: m.index });
-  return out;
-}
-
-// ข้อความใน template literal → ข้อความจริง
-function unTpl(s) {
-  return s.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[\s\S])/g, (all, e) => {
-    if (e[0] === 'u') return String.fromCodePoint(parseInt(e[1] === '{' ? e.slice(2, -1) : e.slice(1), 16));
-    if (e[0] === 'x') return String.fromCharCode(parseInt(e.slice(1), 16));
-    return { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '0': '\0' }[e] || e;
-  });
-}
-
-// แปลง object ของข้อหนึ่ง (เขียนแบบ JavaScript) เป็น JSON แล้ว parse — ไม่ใช้ eval
-function wnEntryAt(src, pos) {
-  let out = '', i = pos, depth = 0;
-  for (; i < src.length; i++) {
-    const c = src[i];
-    if (c === '`') {
-      let j = i + 1, raw = '';
-      for (; j < src.length; j++) { if (src[j] === '\\') { raw += src[j] + src[j + 1]; j++; continue; } if (src[j] === '`') break; raw += src[j]; }
-      out += JSON.stringify(unTpl(raw)); i = j; continue;
-    }
-    if (c === '"' || c === "'") {
-      let j = i + 1, raw = '';
-      for (; j < src.length; j++) { if (src[j] === '\\') { raw += src[j] + src[j + 1]; j++; continue; } if (src[j] === c) break; raw += src[j]; }
-      out += JSON.stringify(unTpl(raw)); i = j; continue;
-    }
-    if (/[A-Za-z_$]/.test(c)) {
-      let j = i; while (j < src.length && /[\w$]/.test(src[j])) j++;
-      const word = src.slice(i, j);
-      if (src[j] === ':') out += JSON.stringify(word);
-      else out += { '!0': 'true', '!1': 'false' }[word] || (word === 'true' || word === 'false' || word === 'null' ? word : 'null');
-      i = j - 1; continue;
-    }
-    if (c === '!' && (src[i + 1] === '0' || src[i + 1] === '1')) { out += src[i + 1] === '0' ? 'true' : 'false'; i++; continue; }
-    out += c;
-    if (c === '{' || c === '[') depth++;
-    else if (c === '}' || c === ']') { depth--; if (depth === 0) break; }
-  }
-  return JSON.parse(out);
-}
-
-// ภาพ/วิดีโอของแต่ละข้อ: ไฟล์อยู่ในโฟลเดอร์ assets/changelog/<วันที่>/<ลำดับ-ชื่อ>/ และมีไฟล์ entry-id.txt บอกว่าเป็นของข้อใด
-function wnMedia(src, date) {
-  const vals = {};
-  let m;
-  const reDef = /([A-Za-z_$][\w$]*)=`(\/assets\/[^`]+|data:[^`]+)`/g;
-  while ((m = reDef.exec(src))) vals[m[1]] = m[2];
-  const reMark = /([A-Za-z_$][\w$]*)=`([^`\s]+)\s+#/g;
-  const marks = {};
-  while ((m = reMark.exec(src))) marks[m[1]] = m[2];
-  const folders = {};
-  const reGlob = new RegExp('"\\.\\./assets/changelog/' + date + '/([^"/]+)/([^"/]+)":([A-Za-z_$][\\w$]*)', 'g');
-  while ((m = reGlob.exec(src))) {
-    const f = folders[m[1]] = folders[m[1]] || { files: [] };
-    if (m[2] === 'entry-id.txt') f.id = marks[m[3]];
-    else if (vals[m[3]]) f.files.push({ name: m[2], url: vals[m[3]] });
-  }
-  const byId = {};
-  for (const k in folders) {
-    const f = folders[k];
-    if (!f.id) continue;
-    byId[f.id] = f.files.sort((a, b) => a.name.localeCompare(b.name)).map(x => ({
-      name: x.name, video: /\.(mp4|webm|mov)$/i.test(x.name),
-      url: x.url.indexOf('data:') === 0 ? x.url : WN_SITE + x.url,
-    }));
-  }
-  return byId;
-}
-
-// รูปแบบข้อความเหมือนข้อที่นำเข้าไว้แล้วในชีท
-function wnSection(s) {
-  const out = ['【' + s.heading + '】'];
-  ['text', 'bullets', 'table', 'note'].filter(k => k in s).forEach(k => {
-    if (k === 'text' || k === 'note') out.push(s[k]);
-    else if (k === 'bullets') s.bullets.forEach((b, i) => out.push((s.ordered ? (i + 1) + '. ' : '• ') + b));
-    else s.table.rows.forEach(r => out.push('• ' + r[0] + (r.length > 1 ? ' — ' + r.slice(1).map((v, i) => s.table.columns[i + 1] + ': ' + v).join(' / ') : '')));
-  });
-  return out.join('\n');
-}
-function wnFixText(d) {
-  const fix = (d.fix || []).map(f => '• ' + f).join('\n');
-  if (!(d.sections || []).length) return fix;
-  return d.sections.map(wnSection).join('\n\n') + (fix ? '\n\n【สิ่งที่แก้ไข】\n' + fix : '');
-}
-const wnTestText = d => (d.test || []).map(t => '• ' + t).join('\n');
-
-// ข้อทั้งหมดของวันที่เลือก พร้อมบอกว่ามีในชีทแล้วหรือยัง (เทียบหัวข้อ เฉพาะวันที่นั้น)
-function wnDay(date, src) {
-  src = src || wnSource();
-  const idx = wnIndex(src).filter(e => e.date === date);
-  const media = wnMedia(src, date);
-  const titles = v4Titles();
-  return idx.map(e => {
-    const x = wnEntryAt(src, e.pos);
-    const m = media[e.id] || [];
-    return { id: e.id, title: x.title.trim(), group: WN_GROUP[x.category] || x.category, kind: WN_KIND[x.kind] || x.kind,
-      module: x.module, exists: titles.has(x.title.trim()), images: m.filter(f => !f.video).length, videos: m.filter(f => f.video).length };
-  });
 }
 
 function wnSheet() {
@@ -823,12 +706,11 @@ function v4Titles() {
   return new Set(w.sh.getRange(2, w.c.title + 1, w.sh.getLastRow() - 1, 1).getDisplayValues().map(r => String(r[0]).trim()).filter(String));
 }
 
-// นำเข้าข้อที่เลือกของวันที่นั้น: เพิ่มต่อท้ายแท็บ HOSxP V4 รันเลขลำดับต่อ ข้ามข้อที่หัวข้อมีอยู่แล้ว
-function wnImport(date, ids, editor) {
-  const src = wnSource();
-  const want = new Set(ids);
-  const idx = wnIndex(src).filter(e => e.date === date && want.has(e.id));
-  const media = wnMedia(src, date);
+// นำเข้าข้อที่หน้าเว็บส่งมา (ของวันที่เดียว): เพิ่มต่อท้ายแท็บ HOSxP V4 รันเลขลำดับต่อ ข้ามข้อที่หัวข้อมีอยู่แล้ว
+// p = { date, editor, entries: [{ title, release, group, kind, summary, module, cause, fix, test, files }], media: [{ title, files }] }
+function wnImport(p) {
+  const date = String(p.date || '');
+  if (!/^\d{4}-\d\d-\d\d$/.test(date)) throw new Error('วันที่ไม่ถูกต้อง');
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -844,18 +726,19 @@ function wnImport(date, ids, editor) {
 
     const rows = [], mediaCells = [], added = [];
     let skipped = 0;
-    idx.forEach(e => {
-      const x = wnEntryAt(src, e.pos), title = x.title.trim();
-      if (titles.has(title)) { skipped++; return; }
+    (p.entries || []).forEach(x => {
+      const title = String(x.title || '').trim();
+      if (!title || titles.has(title)) { skipped++; return; }
       titles.add(title);
       const r = new Array(lastCol).fill('');
-      const set = (k, v) => { if (c[k] >= 0) r[c[k]] = v; };
-      set('no', ++no); set('date', dateVal); set('release', x.release || '');
-      set('group', WN_GROUP[x.category] || x.category); set('type', WN_KIND[x.kind] || x.kind);
-      set('title', title); set('summary', x.summary || ''); set('module', x.module || '');
-      set('cause', (x.detail && x.detail.cause) || ''); set('fix', wnFixText(x.detail || {})); set('test', wnTestText(x.detail || {}));
+      const set = (k, v) => { if (c[k] >= 0) r[c[k]] = String(v || ''); };
+      if (c.no >= 0) r[c.no] = ++no;
+      if (c.date >= 0) r[c.date] = dateVal;
+      set('release', x.release); set('group', x.group); set('type', x.kind);
+      set('title', title); set('summary', x.summary); set('module', x.module);
+      set('cause', x.cause); set('fix', x.fix); set('test', x.test);
       rows.push(r);
-      mediaCells.push(wnMediaCell(media[e.id] || [], title));
+      mediaCells.push(wnMediaCell(x.files || [], title));
       added.push({ no, title });
     });
     if (rows.length) {
@@ -868,10 +751,10 @@ function wnImport(date, ids, editor) {
       }
       sh.getRange(start, 1, rows.length, lastCol).setValues(rows);
       if (c.media >= 0) sh.getRange(start, c.media + 1, rows.length, 1).setRichTextValues(mediaCells.map(v => [v]));
-      added.forEach((a, i) => noteEditor(sh.getRange(start + i, (c.title >= 0 ? c.title : 0) + 1), editor || 'ผู้ดูแลระบบ (นำเข้าจาก What\'s New)', 'นำเข้าจาก What\'s New'));
+      added.forEach((a, i) => noteEditor(sh.getRange(start + i, (c.title >= 0 ? c.title : 0) + 1), p.editor || 'ผู้ดูแลระบบ (นำเข้าจาก What\'s New)', 'นำเข้าจาก What\'s New'));
     }
     // ให้ปุ่ม "ดูรูป" ในหน้าเว็บแสดงภาพของทุกข้อในวันนั้น (ทั้งข้อใหม่และข้อที่มีอยู่แล้ว)
-    wnRegisterMedia(src, date, media);
+    wnRegisterMedia(p.media || []);
     CacheService.getScriptCache().remove('opts:' + WN_TARGET_GID);
     return { ok: true, added, skipped };
   } finally {
@@ -891,7 +774,8 @@ function wnMediaCell(files, title) {
   return b.build();
 }
 function wnPublicUrl(f, title) {
-  if (f.url.indexOf('data:') !== 0) return f.url;
+  f.url = String(f.url || '');
+  if (f.url.indexOf('data:') !== 0) return /^https:\/\//.test(f.url) ? f.url : '';
   if (f.driveUrl) return f.driveUrl;
   const m = f.url.match(/^data:([^;]+);base64,(.*)$/);
   if (!m) return '';
@@ -902,10 +786,10 @@ function wnPublicUrl(f, title) {
 }
 
 // รายการภาพจาก What's New ของแต่ละข้อ (เก็บในไฟล์ wn-media.json: { 'gid|หัวข้อ': [url] })
-function wnRegisterMedia(src, date, media) {
+function wnRegisterMedia(list) {
   const store = jsonFileRead('wn-media.json');
-  wnIndex(src).filter(e => e.date === date).forEach(e => {
-    const files = media[e.id] || [], key = WN_TARGET_GID + '|' + e.title;
+  list.forEach(e => {
+    const files = e.files || [], key = WN_TARGET_GID + '|' + String(e.title || '').trim();
     if (!files.length || (store[key] && store[key].length === files.length)) return; // ลงไว้แล้ว ไม่อัปโหลดซ้ำ
     store[key] = files.map(f => wnPublicUrl(f, e.title)).filter(String);
   });
@@ -917,10 +801,7 @@ function wnMediaList() {
   return out;
 }
 
-// ---------- ขอสิทธิ์ (รันครั้งเดียวจากหน้าแก้โค้ด Apps Script) ----------
-// เลือกฟังก์ชัน authorize ที่แถบด้านบน แล้วกด "เรียกใช้ (Run)" > อนุญาตสิทธิ์ทั้งหมด
-// จำเป็นสำหรับการนำเข้าจาก What's New (ต้องเปิดหน้าเว็บภายนอกด้วย UrlFetchApp)
+// ---------- ขอสิทธิ์ (รันครั้งเดียวจากหน้าแก้โค้ด Apps Script ถ้าการ Deploy แจ้งว่าไม่มีสิทธิ์) ----------
 function authorize() {
-  const code = UrlFetchApp.fetch(WN_SITE + '/', { muteHttpExceptions: true }).getResponseCode();
-  Logger.log('What\'s New: HTTP ' + code + ' | โฟลเดอร์รูป: ' + getFolder().getName() + ' | ชีท: ' + SpreadsheetApp.openById(SPREADSHEET_ID).getName());
+  Logger.log('โฟลเดอร์รูป: ' + getFolder().getName() + ' | ชีท: ' + SpreadsheetApp.openById(SPREADSHEET_ID).getName());
 }

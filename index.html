@@ -335,7 +335,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.132212';
+const APP_VERSION = '20261021.141155';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -401,17 +401,135 @@ function adminShow(){
 // ---- นำเข้าข้อใหม่จาก What's New (ทีละวันที่ ไม่ตรวจย้อนหลังทั้งหมด) ----
 const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const thDate = iso => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${TH_MON[m-1]} ${y + 543}`; };
+// เว็บ What's New ไม่ให้ Google Apps Script อ่าน และไม่เปิด CORS → อ่านผ่าน server.ps1 บนเครื่องนี้ (/wn/...)
+const WN_SITE = 'https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th';
+const WN_GROUP = { clinic: 'คลินิก', pharmacy: 'เภสัชกรรม', finance: 'การเงิน', export: 'ส่งออก/ส่งเบิก', api: 'เชื่อมต่อระบบอื่น', system: 'ระบบภายใน' };
+const WN_KIND = { feature: 'ของใหม่', improvement: 'ปรับปรุง', fix: 'แก้ไข' };
+const WN_BASES = location.port === '4001' ? ['/wn/'] : ['http://localhost:4001/wn/', WN_SITE + '/'];
+let wnBase = null;
+async function wnGet(path){
+  for(const base of wnBase ? [wnBase] : WN_BASES){
+    try{
+      const r = await fetch(base + path, {cache:'no-store'});
+      if(r.ok){ wnBase = base; return await r.text(); }
+    }catch(e){ /* ลองช่องทางถัดไป */ }
+  }
+  throw new Error("อ่านหน้า What's New ไม่ได้ — ต้องเปิดโปรแกรมบนเครื่องนี้ก่อน (ดับเบิลคลิก start.bat) แล้วเข้าหน้านี้จาก http://localhost:4001");
+}
+let wnSrc = '', wnIdx = null;
+async function wnLoadSource(){
+  const main = ((await wnGet('')).match(/assets\/index-[\w-]+\.js/) || [])[0];
+  if(!main) throw new Error("อ่านหน้า What's New ไม่ได้");
+  const chunk = ((await wnGet(main)).match(/assets\/WhatsNew-[\w-]+\.js/) || [])[0];
+  if(!chunk) throw new Error("ไม่พบไฟล์ข้อมูล What's New");
+  wnSrc = await wnGet(chunk);
+  wnIdx = wnIndex(wnSrc);
+}
+// รายการย่อ (id, วันที่, หัวข้อ) ของทุกข้อ — อ่านเร็ว ไม่ต้องแปลงทั้งก้อน
+function wnIndex(src) {
+  const re = /\{id:`([^`]+)`,date:`(\d{4}-\d\d-\d\d)`,title:`((?:\\`|[^`])*)`/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(src))) out.push({ id: m[1], date: m[2], title: unTpl(m[3]).trim(), pos: m.index });
+  return out;
+}
+
+// ข้อความใน template literal → ข้อความจริง
+function unTpl(s) {
+  return s.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[\s\S])/g, (all, e) => {
+    if (e[0] === 'u') return String.fromCodePoint(parseInt(e[1] === '{' ? e.slice(2, -1) : e.slice(1), 16));
+    if (e[0] === 'x') return String.fromCharCode(parseInt(e.slice(1), 16));
+    return { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '0': '\0' }[e] || e;
+  });
+}
+
+// แปลง object ของข้อหนึ่ง (เขียนแบบ JavaScript) เป็น JSON แล้ว parse — ไม่ใช้ eval
+function wnEntryAt(src, pos) {
+  let out = '', i = pos, depth = 0;
+  for (; i < src.length; i++) {
+    const c = src[i];
+    if (c === '`') {
+      let j = i + 1, raw = '';
+      for (; j < src.length; j++) { if (src[j] === '\\') { raw += src[j] + src[j + 1]; j++; continue; } if (src[j] === '`') break; raw += src[j]; }
+      out += JSON.stringify(unTpl(raw)); i = j; continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1, raw = '';
+      for (; j < src.length; j++) { if (src[j] === '\\') { raw += src[j] + src[j + 1]; j++; continue; } if (src[j] === c) break; raw += src[j]; }
+      out += JSON.stringify(unTpl(raw)); i = j; continue;
+    }
+    if (/[A-Za-z_$]/.test(c)) {
+      let j = i; while (j < src.length && /[\w$]/.test(src[j])) j++;
+      const word = src.slice(i, j);
+      if (src[j] === ':') out += JSON.stringify(word);
+      else out += { '!0': 'true', '!1': 'false' }[word] || (word === 'true' || word === 'false' || word === 'null' ? word : 'null');
+      i = j - 1; continue;
+    }
+    if (c === '!' && (src[i + 1] === '0' || src[i + 1] === '1')) { out += src[i + 1] === '0' ? 'true' : 'false'; i++; continue; }
+    out += c;
+    if (c === '{' || c === '[') depth++;
+    else if (c === '}' || c === ']') { depth--; if (depth === 0) break; }
+  }
+  return JSON.parse(out);
+}
+
+// ภาพ/วิดีโอของแต่ละข้อ: ไฟล์อยู่ในโฟลเดอร์ assets/changelog/<วันที่>/<ลำดับ-ชื่อ>/ และมีไฟล์ entry-id.txt บอกว่าเป็นของข้อใด
+function wnMedia(src, date) {
+  const vals = {};
+  let m;
+  const reDef = /([A-Za-z_$][\w$]*)=`(\/assets\/[^`]+|data:[^`]+)`/g;
+  while ((m = reDef.exec(src))) vals[m[1]] = m[2];
+  const reMark = /([A-Za-z_$][\w$]*)=`([^`\s]+)\s+#/g;
+  const marks = {};
+  while ((m = reMark.exec(src))) marks[m[1]] = m[2];
+  const folders = {};
+  const reGlob = new RegExp('"\\.\\./assets/changelog/' + date + '/([^"/]+)/([^"/]+)":([A-Za-z_$][\\w$]*)', 'g');
+  while ((m = reGlob.exec(src))) {
+    const f = folders[m[1]] = folders[m[1]] || { files: [] };
+    if (m[2] === 'entry-id.txt') f.id = marks[m[3]];
+    else if (vals[m[3]]) f.files.push({ name: m[2], url: vals[m[3]] });
+  }
+  const byId = {};
+  for (const k in folders) {
+    const f = folders[k];
+    if (!f.id) continue;
+    byId[f.id] = f.files.sort((a, b) => a.name.localeCompare(b.name)).map(x => ({
+      name: x.name, video: /\.(mp4|webm|mov)$/i.test(x.name),
+      url: x.url.indexOf('data:') === 0 ? x.url : WN_SITE + x.url,
+    }));
+  }
+  return byId;
+}
+
+// รูปแบบข้อความเหมือนข้อที่นำเข้าไว้แล้วในชีท
+function wnSection(s) {
+  const out = ['【' + s.heading + '】'];
+  ['text', 'bullets', 'table', 'note'].filter(k => k in s).forEach(k => {
+    if (k === 'text' || k === 'note') out.push(s[k]);
+    else if (k === 'bullets') s.bullets.forEach((b, i) => out.push((s.ordered ? (i + 1) + '. ' : '• ') + b));
+    else s.table.rows.forEach(r => out.push('• ' + r[0] + (r.length > 1 ? ' — ' + r.slice(1).map((v, i) => s.table.columns[i + 1] + ': ' + v).join(' / ') : '')));
+  });
+  return out.join('\n');
+}
+function wnFixText(d) {
+  const fix = (d.fix || []).map(f => '• ' + f).join('\n');
+  if (!(d.sections || []).length) return fix;
+  return d.sections.map(wnSection).join('\n\n') + (fix ? '\n\n【สิ่งที่แก้ไข】\n' + fix : '');
+}
+const wnTestText = d => (d.test || []).map(t => '• ' + t).join('\n');
+
 let wnItems = [], wnDatesLoaded = false;
 async function wnLoadDates(){
-  if(wnDatesLoaded || !UPLOAD_URL) return;
+  if(wnDatesLoaded) return;
   const sel = document.getElementById('wnDate');
+  sel.innerHTML = "<option value=\"\">กำลังโหลดข้อมูล What's New…</option>";
   try{
-    const out = await jsonp(UPLOAD_URL + '?action=wndates', 120000);
-    if(!out.ok) throw new Error(out.error);
-    if(!out.dates) throw new Error('Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์แล้ว Deploy เป็นเวอร์ชันใหม่');
-    sel.innerHTML = '<option value="">เลือกวันที่…</option>' + out.dates.map(d=>`<option value="${d.date}">${thDate(d.date)} (${d.count} ข้อ)</option>`).join('');
+    await wnLoadSource();
+    const counts = {};
+    wnIdx.forEach(e=>counts[e.date] = (counts[e.date] || 0) + 1);
+    sel.innerHTML = '<option value="">เลือกวันที่…</option>' + Object.keys(counts).sort().reverse().map(d=>`<option value="${d}">${thDate(d)} (${counts[d]} ข้อ)</option>`).join('');
     wnDatesLoaded = true;
-  }catch(e){ sel.innerHTML = `<option value="">โหลดรายการวันที่ไม่สำเร็จ: ${esc(e.message)}</option>`; }
+  }catch(e){ sel.innerHTML = `<option value="">${esc(e.message)}</option>`; }
 }
 async function wnLoadDay(){
   const date = document.getElementById('wnDate').value, list = document.getElementById('wnList'), btn = document.getElementById('wnImportBtn'), msg = document.getElementById('wnMsg');
@@ -419,13 +537,18 @@ async function wnLoadDay(){
   if(!date){ list.innerHTML = ''; return; }
   list.innerHTML = '<p class="meta" style="padding:8px">กำลังอ่านข้อของวันที่ ' + thDate(date) + ' และตรวจกับชีท HOSxP V4…</p>';
   try{
-    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'wnday', date}), 120000);
-    if(!out.ok) throw new Error(out.error);
-    if(!out.items) throw new Error('Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์');
-    wnItems = out.items;
+    const t = await jsonp(UPLOAD_URL + '?action=wntitles', 60000);
+    if(!t.ok || !t.titles) throw new Error(t.error || 'Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์แล้ว Deploy เป็นเวอร์ชันใหม่');
+    const titles = new Set(t.titles), media = wnMedia(wnSrc, date);
+    wnItems = wnIdx.filter(e=>e.date === date).map(e=>{
+      const x = wnEntryAt(wnSrc, e.pos), d = x.detail || {}, files = media[e.id] || [], title = x.title.trim();
+      return { id: e.id, title, exists: titles.has(title), images: files.filter(f=>!f.video).length, videos: files.filter(f=>f.video).length,
+        row: { title, release: x.release || '', group: WN_GROUP[x.category] || x.category || '', kind: WN_KIND[x.kind] || x.kind || '',
+          summary: x.summary || '', module: x.module || '', cause: d.cause || '', fix: wnFixText(d), test: wnTestText(d), files } };
+    });
     const fresh = wnItems.filter(x=>!x.exists).length;
     list.innerHTML = `<table><thead><tr><th><input type="checkbox" id="wnAll" ${fresh?'checked':'disabled'} title="เลือกทั้งหมด"></th><th>หัวข้อ</th><th>กลุ่ม</th><th>ประเภท</th><th>ภาพ</th><th>ในชีท</th></tr></thead><tbody>${
-      wnItems.map((x,i)=>`<tr class="${x.exists?'exists':''}"><td><input type="checkbox" data-wn="${i}" ${x.exists?'disabled':'checked'}></td><td>${esc(x.title)}</td><td>${esc(x.group)}</td><td>${esc(x.kind)}</td>
+      wnItems.map((x,i)=>`<tr class="${x.exists?'exists':''}"><td><input type="checkbox" data-wn="${i}" ${x.exists?'disabled':'checked'}></td><td>${esc(x.title)}</td><td>${esc(x.row.group)}</td><td>${esc(x.row.kind)}</td>
         <td>${x.images}${x.videos ? ' + วิดีโอ ' + x.videos : ''}</td><td>${x.exists ? '<span class="tag old">มีแล้ว</span>' : '<span class="tag new">ยังไม่มี</span>'}</td></tr>`).join('')}</tbody></table>`;
     msg.textContent = `ทั้งหมด ${wnItems.length} ข้อ · มีในชีทแล้ว ${wnItems.length - fresh} · ยังไม่มี ${fresh}`;
     wnUpdateBtn();
@@ -447,7 +570,18 @@ document.getElementById('wnImportBtn').addEventListener('click', async ()=>{
   let pw = ''; try{ pw = sessionStorage.getItem('adminpw') || ''; }catch(e){}
   btn.disabled = true; btn.textContent = 'กำลังนำเข้า… (อาจใช้เวลาครึ่งนาที)';
   try{
-    const out = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'wnimport', date, ids: sel.map(x=>x.id).join(','), pw, editor: editorLabel()}), 300000);
+    const job = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    // ส่งแบบ no-cors (อ่านคำตอบไม่ได้) แล้วถามผลจาก Apps Script
+    try{
+      await fetch(UPLOAD_URL, {method:'POST', mode:'no-cors', credentials:'omit', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({action:'wnimport', job, date, pw, editor: editorLabel(), entries: sel.map(x=>x.row), media: wnItems.map(x=>({title: x.title, files: x.row.files}))})});
+    }catch(e){ /* อาจหมดเวลาฝั่งเบราว์เซอร์ แต่สคริปต์ยังทำงานอยู่ → ถามผลต่อ */ }
+    let out = null;
+    for(let i = 0; i < 40 && !out; i++){
+      const r = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'wnjob', job}), 60000);
+      if(r.pending) await new Promise(ok=>setTimeout(ok, 3000)); else out = r;
+    }
+    if(!out) throw new Error('ไม่ได้รับผลการนำเข้าจาก Apps Script (ลองโหลดหน้าใหม่แล้วตรวจในชีท)');
     if(!out.ok) throw new Error(out.error);
     const a = out.added;
     msg.textContent = a.length ? `✓ นำเข้าแล้ว ${a.length} ข้อ (ลำดับ ${a[0].no}–${a[a.length-1].no})${out.skipped ? ' · ข้ามที่มีอยู่แล้ว ' + out.skipped : ''}` : 'ไม่มีข้อใหม่ให้นำเข้า';
