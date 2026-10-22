@@ -351,7 +351,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261022.100728';
+const APP_VERSION = '20261022.103415';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -898,7 +898,7 @@ function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.id
 // ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ห้องฉุกเฉิน ER + ER + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
 // (รวมเฉพาะในหน้าสรุป ไม่แก้ชีท — ข้อที่หัวข้อซ้ำกันนับครั้งเดียว)
 const XE_GIDS = ['653470496', '304524163', '480114421', '1356310016', '332727688'];
-function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe',untested:false,tested:false}; }
+function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe',untested:false,tested:false,lastWeek:!!memGet('lastWeek')}; }
 
 function applyFilters(items, fl){
   const range = dateRange(fl);
@@ -1205,6 +1205,13 @@ async function closeEditor(newValue){
   }
 }
 
+// หน้ารายชื่อ: กลุ่มคอลัมน์ตามหัวตารางชั้นบน [[คอลัมน์,...], ...] — กลุ่มแรกคือข้อมูลคน กลุ่มถัดไปคือแต่ละสัปดาห์ (ขวาสุด = ล่าสุด)
+function weekGroups(t){
+  if(!t || !t.top) return [];
+  const groups = [];
+  t.headers.forEach((_, i)=>{ if(!groups.length || t.top[t.colIdx[i]]) groups.push([]); groups[groups.length-1].push(i); });
+  return groups;
+}
 // หน้ารายชื่อ: คอลัมน์สถานะทดสอบของสัปดาห์ล่าสุด (คอลัมน์ขวาสุดที่ชื่อนี้) — ว่าง/รอ/ยังไม่… = ยังไม่ทดสอบ
 const statusCol = t => t && t.headers ? t.headers.map(h=>String(h).trim()).lastIndexOf('สถานะทดสอบ') : -1;
 const isTested = v => { v = norm(v); return !!v && !/^(รอ|ยังไม่)/.test(v); };
@@ -1214,7 +1221,8 @@ function searchBar(fl, tab){
   const done = sc >= 0 ? t.rows.filter(r=>isTested(r[sc])).length : 0;
   const st = sc >= 0 ? `<label class="imgchk"><input type="checkbox" data-k="untested"${fl.untested?' checked':''}>แสดงเฉพาะคนยังไม่ทดสอบ (${t.rows.length - done})</label>
     <label class="imgchk"><input type="checkbox" data-k="tested"${fl.tested?' checked':''}>แสดงเฉพาะคนที่ทดสอบแล้ว (${done})</label>` : '';
-  return `<div class="filters"><div class="qline"><span>ค้นหา</span><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button>${st}<b id="count"></b></div>${tab.note ? `
+  const wk = tab.weekLines && weekGroups(t).length > 2 ? `<label class="imgchk"><input type="checkbox" data-k="lastWeek"${fl.lastWeek?' checked':''}>ซ่อนสัปดาห์ที่ผ่านมาแล้ว</label>` : '';
+  return `<div class="filters"><div class="qline"><span>ค้นหา</span><input data-k="q" type="search" value="${esc(fl.q)}" placeholder="ชื่อ ชื่อเล่น ระบบงาน…"><button data-clear title="ล้างตัวกรองทั้งหมด">ล้าง</button>${st}${wk}<b id="count"></b></div>${tab.note ? `
     <div class="roster-note">การทดสอบ ให้เป็นเวอร์ชั่นปัจจุบันเสมอ และต้องเข้าไปดูข้อมูลใน What's New ที่ลิงก์นี้ <a href="https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/" target="_blank" rel="noopener">https://hosxp-v4-whatsnew-00000.kube.bmscloud.in.th/</a> ว่าระบบงานที่ตนเองทดสอบมีอะไรมาใหม่บ้างในทุกวัน</div>` : ''}</div>`;
 }
 // ตรึงคอลัมน์ซ้าย (เหมือนตรึงแนวใน Google Sheet): วัดความกว้างจริงแล้วตั้งตำแหน่ง sticky
@@ -1254,6 +1262,11 @@ function renderSheet(tab){
   const order = t.headers.map((_,i)=>i).filter(i=>!/^คอลัมน์ /.test(t.headers[i]) && !HIDE_COLS.test(t.headers[i]) && !(tab.hide||[]).includes(t.headers[i]));
   const mv = t.headers.indexOf('ผลการทดสอบ') >= 0 ? t.headers.indexOf('ผลการทดสอบ') : resCol;
   if(mv>=0 && t.f.type>=0 && mv!==t.f.type+1){ order.splice(order.indexOf(mv),1); order.splice(order.indexOf(t.f.type)+1,0,mv); }
+  // ซ่อนสัปดาห์ที่ผ่านมาแล้ว: เหลือข้อมูลคน + สัปดาห์ล่าสุด
+  if(tab.weekLines && fl.lastWeek){
+    const g = weekGroups(t);
+    if(g.length > 2){ const old = new Set(g.slice(1, -1).flat()); for(let k = order.length - 1; k >= 0; k--) if(old.has(order[k])) order.splice(k, 1); }
+  }
   const showHist = !tab.roster && !!UPLOAD_URL;
   const merge = tab.sheetStyle ? mergePlan(tab, t, shown) : {};
   const body = shown.map(it=>`<tr>${order.map(i=>{ let c = it.row[i];
@@ -1719,6 +1732,7 @@ document.getElementById('main').addEventListener('change', e=>{
   const fl = getFilter(currentTab().name); fl[k] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(k==='untested' && fl.untested) fl.tested = false;
   if(k==='tested' && fl.tested) fl.untested = false;
+  if(k==='lastWeek') memSet('lastWeek', fl.lastWeek); // จำไว้สำหรับครั้งหน้า
   if(k==='img' && fl.img && !driveLoadedAt){ document.getElementById('count').textContent = 'กำลังโหลดรายการรูป…'; ensureDriveList().finally(render); return; }
   if(k==='src'){ fl.group=fl.type=fl.result=fl.tester=''; }
   render();
