@@ -79,6 +79,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
 .m8{--mbg:#fdf6d8;--mbd:#f3e3a0;--mfg:#7a5c00}
 .m9{--mbg:#e9eef5;--mbd:#cdd8e6;--mfg:#2f4b6e}
 .m10{--mbg:#ffecd2;--mbd:#ffd29a;--mfg:#8a4b00}
+.m11{--mbg:#ffe3e8;--mbd:#f7bcc8;--mfg:#a3123a}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .m0{--mbg:#232845;--mbd:#313968;--mfg:#b3bdf5}
   :root:not([data-theme="light"]) .m1{--mbg:#1b2a3a;--mbd:#25405a;--mfg:#9ccaf2}
@@ -91,6 +92,7 @@ nav a.active{background:var(--mbd);opacity:1;box-shadow:inset 0 -3px 0 var(--mfg
   :root:not([data-theme="light"]) .m8{--mbg:#33290f;--mbd:#4d3e17;--mfg:#f0d48a}
   :root:not([data-theme="light"]) .m9{--mbg:#1d2633;--mbd:#2b3a4f;--mfg:#b5c9e6}
   :root:not([data-theme="light"]) .m10{--mbg:#3a2a12;--mbd:#57401c;--mfg:#ffc98a}
+  :root:not([data-theme="light"]) .m11{--mbg:#3a1820;--mbd:#5a2532;--mfg:#ff9fb3}
 }
 main{border-top:3px solid var(--mbd)}
 nav a .n{font-weight:400;font-size:12px;margin-left:4px}
@@ -349,14 +351,14 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261022.092404';
+const APP_VERSION = '20261022.100455';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
 // OAuth Client ID สำหรับปุ่ม "เข้าสู่ระบบด้วย Google" (ว่าง = ไม่แสดงปุ่ม, ผู้ที่กำลังดูทุกคนนับเป็นผู้เยี่ยมชม)
 const GOOGLE_CLIENT_ID = '';
 // แท็บตามลำดับใน Google Sheet; result = คอลัมน์ที่ใช้เป็น "ผลการทดสอบ" ในตัวกรอง, hide = คอลัมน์ที่ไม่แสดง
-// color = เลขสีประจำเมนู (.m0–.m10) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
+// color = เลขสีประจำเมนู (.m0–.m11) กำหนดตายตัว เพื่อให้สีเมนูเดิมไม่เปลี่ยนเมื่อเพิ่มเมนูใหม่
 const TABS = [
   // roster = หน้ารายชื่อ (ไม่ใช่รายการทดสอบ): headerRow = แถวหัวตาราง, freezeCols = จำนวนคอลัมน์ซ้ายที่ตรึงไว้ (ตรึงถึงชื่อเล่น)
   // editable = คอลัมน์ที่แก้ได้ (ชื่อหัวตารางแถว 2), sheetStyle = ใช้สี/ตัวหนา/เซลล์ผสานตามชีท, note = แสดงข้อความแจ้ง What's New
@@ -364,6 +366,7 @@ const TABS = [
   {name:'รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)', gid:'1921321948', roster:true, headerRow:2, freezeCols:4, note:true, weekLines:true, editable:['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'], color:9},
   {name:'สรุป', gid:'750027123', summary:true, color:0},
   {name:'HOSxP V4', gid:'653470496', color:1},
+  {name:'ห้องฉุกเฉิน ER', gid:'304524163', color:11},
   {name:'ไม่สามารถทดสอบได้', gid:'1356310016', color:8},
   {name:'ส่งออก', gid:'332727688', color:6},
   {name:'PPL', gid:'1701737701', color:2},
@@ -890,8 +893,8 @@ function dateRange(fl){
 }
 // ข้อนี้มีรูป (ลิงก์ในชีท หรือรูปที่อัปโหลดผ่านระบบ) ให้กดดูได้หรือไม่
 function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.idx).urls.length>0; }
-// ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
-const XE_GIDS = ['653470496', '1356310016', '332727688'];
+// ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ห้องฉุกเฉิน ER + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
+const XE_GIDS = ['653470496', '304524163', '1356310016', '332727688'];
 function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe',untested:false,tested:false}; }
 
 function applyFilters(items, fl){
@@ -907,8 +910,9 @@ function applyFilters(items, fl){
 
 function toItems(gid){
   const t = data[gid]; if(!t) return [];
+  const ti = t.headers.findIndex(h=>/^หัวข้อ/.test(h));
   return t.rows.map((r,idx)=>({
-    row:r, gid, idx,
+    row:r, gid, idx, title: ti >= 0 ? norm(r[ti]) : '',
     group:val(r,t.f.group), type:val(r,t.f.type), result:val(r,t.f.result), tester:val(r,t.f.tester), system:val(r,t.f.system), date:isoDate(t.f.date>=0 ? r[t.f.date] : ''),
     text:r.join(' ').toLowerCase(),
   }));
@@ -1349,14 +1353,26 @@ function card(id, cls, title, html){
     <div class="card-body" style="overflow:auto">${html}</div></div>`;
 }
 
+// รวมหลายชีท: ข้อที่หัวข้อซ้ำกัน (เช่น ข้อ ER ที่อยู่ทั้งใน HOSxP V4 และห้องฉุกเฉิน ER) นับครั้งเดียว
+// ใช้แถวที่มีผลการทดสอบแล้ว ถ้ามีทั้งคู่ใช้ชีทที่อยู่ก่อนในรายการ
+function dedupeItems(list){
+  const seen = new Map(), out = [];
+  for(const it of list){
+    if(!it.title){ out.push(it); continue; }
+    const k = seen.get(it.title);
+    if(k === undefined){ seen.set(it.title, out.length); out.push(it); }
+    else if(!norm(out[k].result) && norm(it.result)) out[k] = it;
+  }
+  return out;
+}
 function renderSummary(tab){
   const fl = getFilter(tab.name);
   const sources = TABS.filter(t=>!t.summary && !t.roster);
   const gids = fl.src==='all' ? sources.map(t=>t.gid) : fl.src==='xe' ? XE_GIDS : [fl.src];
   // หน้าสรุปจัดผลการทดสอบเป็น 4 กลุ่ม (ค่าอื่นนับเป็นรอทดสอบ)
-  const all = gids.flatMap(toItems).map(i=>({...i, result:resultBucket(i.result)}));
+  const all = dedupeItems(gids.flatMap(toItems)).map(i=>({...i, result:resultBucket(i.result)}));
   const items = applyFilters(all, fl);
-  const xeCount = XE_GIDS.reduce((n,g)=>n+(data[g]?.rows.length||0), 0);
+  const xeCount = dedupeItems(XE_GIDS.flatMap(toItems)).length;
   const srcSel = `<label>ข้อมูลจากชีท<select data-k="src"><option value="xe"${fl.src==='xe'?' selected':''}>HOSxP XE (${xeCount})</option>${
     sources.map(t=>`<option value="${t.gid}"${fl.src===t.gid?' selected':''}>${esc(t.name)} (${data[t.gid]?.rows.length||0})</option>`).join('')
   }<option value="all"${fl.src==='all'?' selected':''}>ทุกชีทรวมกัน</option></select></label>`;
