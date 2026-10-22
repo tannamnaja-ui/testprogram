@@ -743,6 +743,9 @@ function wnImport(p) {
     });
     if (rows.length) {
       const start = lastRow + 1;
+      // แผ่นงานไม่มีแถวว่างพอ: เพิ่มแถวต่อท้ายก่อน
+      const need = start + rows.length - 1 - sh.getMaxRows();
+      if (need > 0) sh.insertRowsAfter(sh.getMaxRows(), need);
       // ใช้รูปแบบและ dropdown เดียวกับแถวสุดท้าย
       if (lastRow > 1) {
         const from = sh.getRange(lastRow, 1, 1, lastCol), to = sh.getRange(start, 1, rows.length, lastCol);
