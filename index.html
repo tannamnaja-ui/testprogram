@@ -349,7 +349,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261022.091512';
+const APP_VERSION = '20261022.092110';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -549,16 +549,21 @@ async function wnLoadDates(){
 // กับ 8 ข้อที่คล้ายที่สุด แล้วเพิ่มคะแนนให้ระบบงานที่ชื่ออยู่ในโมดูลหรือหัวข้อ (ทดสอบกับข้อเดิมในชีท เดาถูกราว 77%)
 let wnSys = null;
 async function wnSysModel(){
-  if(wnSys) return wnSys;
-  const [res, o] = await Promise.all([
-    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=653470496&_=${Date.now()}`, {cache:'no-store'}),
-    jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid:'653470496'}), 60000)]);
+  // อ่านแท็บ HOSxP V4 ใหม่ทุกครั้ง (ใช้ตรวจว่าหัวข้อไหนมีแล้วด้วย) — อ่านจาก Google Sheet โดยตรง ไม่ต้องรอ Apps Script
+  const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=653470496&_=${Date.now()}`, {cache:'no-store'});
+  if(!res.ok) throw new Error('อ่านแท็บ HOSxP V4 ไม่สำเร็จ (HTTP ' + res.status + ')');
   const g = parseCSV(await res.text()), h = (g[0] || []).map(x=>String(x).trim());
   const at = re => h.findIndex(x=>re.test(x));
   const cs = at(/^ระบบงาน/), cm = at(/^โมดูล/), ct = at(/^หัวข้อ/), cd = at(/^รายละเอียดย่อ/), cg = at(/^กลุ่ม/);
-  const opts = (((o && o.cols) || {})[cs + 1] || []).map(x=>String(x).trim()).filter(String);
+  const titles = new Set(g.slice(1).map(r=>String(r[ct] || '').trim()).filter(String));
+  // ตัวเลือก dropdown ระบบงาน: ถาม Apps Script (ถ้าช้า ใช้ค่าที่จำไว้ หรือค่าที่ใช้อยู่ในชีท)
+  let cols = null;
+  try{ const o = await jsonp(UPLOAD_URL + '?' + new URLSearchParams({action:'opts', gid:'653470496'}), 20000, 2); if(o && o.ok) cols = o.cols; }catch(e){ /* ใช้ค่าสำรอง */ }
+  cols = cols || (optsByGid['653470496'] || memGet('opts:653470496') || {}).cols || {};
+  let opts = (cols[cs + 1] || []).map(x=>String(x).trim()).filter(String);
+  if(!opts.length && cs >= 0) opts = [...new Set(g.slice(1).map(r=>String(r[cs] || '').trim()).filter(String))].sort((a, b)=>a.localeCompare(b, 'th'));
   const cur = new Map();
-  if(cs < 0 || !opts.length) return wnSys = { opts, cur, guess: ()=>'' };
+  if(cs < 0 || !opts.length) return wnSys = { opts, cur, titles, guess: ()=>'' };
   // ชื่อระบบงานเดิมที่เปลี่ยนชื่อไปแล้ว: เทียบจากข้อความในวงเล็บ
   const paren = x=>(x.match(/\(.*\)/) || [''])[0];
   const toOpt = v=>{ v = v.trim(); if(opts.includes(v)) return v; const p = paren(v); return (p && opts.find(x=>paren(x)===p)) || ''; };
@@ -592,7 +597,7 @@ async function wnSysModel(){
     opts.forEach(x=>{ if(words[x].some(w=>text.includes(w))) sc[x] = (sc[x] || 0) + 0.6; });
     return (Object.entries(sc).sort((a, b)=>b[1] - a[1])[0] || [''])[0];
   };
-  return wnSys = { opts, cur, guess };
+  return wnSys = { opts, cur, titles, guess };
 }
 async function wnLoadDay(){
   const date = document.getElementById('wnDate').value, list = document.getElementById('wnList'), btn = document.getElementById('wnImportBtn'), msg = document.getElementById('wnMsg');
@@ -600,9 +605,7 @@ async function wnLoadDay(){
   if(!date){ list.innerHTML = ''; return; }
   list.innerHTML = '<p class="meta" style="padding:8px">กำลังอ่านข้อของวันที่ ' + thDate(date) + ' และตรวจกับชีท HOSxP V4…</p>';
   try{
-    const t = await jsonp(UPLOAD_URL + '?action=wntitles', 60000);
-    if(!t.ok || !t.titles) throw new Error(t.error || 'Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดตสคริปต์แล้ว Deploy เป็นเวอร์ชันใหม่');
-    const titles = new Set(t.titles), media = wnMedia(wnSrc, date), sys = await wnSysModel();
+    const sys = await wnSysModel(), titles = sys.titles, media = wnMedia(wnSrc, date);
     wnItems = wnIdx.filter(e=>e.date === date).map(e=>{
       const x = wnEntryAt(wnSrc, e.pos), d = x.detail || {}, files = media[e.id] || [], title = x.title.trim();
       return { id: e.id, title, exists: titles.has(title), images: files.filter(f=>!f.video).length, videos: files.filter(f=>f.video).length,
