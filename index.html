@@ -346,7 +346,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261021.153855';
+const APP_VERSION = '20261022.090018';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -1441,13 +1441,18 @@ function rowMedia(gid, idx){
   }
   return {urls, note};
 }
-function jsonp(url, timeoutMs = 30000){
+// เรียก Apps Script แบบ JSONP — ถ้าโหลดไม่ขึ้น (Apps Script ตอบหน้า error ชั่วคราว เช่นมีคนเรียกพร้อมกันมาก) ลองใหม่อีก 2 ครั้ง
+function jsonp(url, timeoutMs = 30000, tries = 3){
   return new Promise((resolve, reject)=>{
     const cb = 'jp' + Date.now() + Math.floor(Math.random()*1e6), s = document.createElement('script');
     const done = ()=>{ delete window[cb]; s.remove(); clearTimeout(timer); };
     const timer = setTimeout(()=>{ done(); reject(new Error('หมดเวลารอคำตอบจาก Apps Script')); }, timeoutMs);
     window[cb] = d=>{ done(); resolve(d); };
-    s.onerror = ()=>{ done(); reject(new Error('โหลดรายการรูปไม่สำเร็จ')); };
+    s.onerror = ()=>{
+      done();
+      if(tries > 1) setTimeout(()=>jsonp(url, timeoutMs, tries - 1).then(resolve, reject), 1500);
+      else reject(new Error('เรียก Apps Script ไม่สำเร็จ (' + ((url.match(/action=(\w+)/) || [])[1] || 'ไม่ทราบคำสั่ง') + ') กรุณาลองใหม่'));
+    };
     s.src = url + (url.includes('?')?'&':'?') + 'callback=' + cb + '&_=' + Date.now();
     document.head.appendChild(s);
   });
