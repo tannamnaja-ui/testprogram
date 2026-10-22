@@ -161,6 +161,9 @@ table.data.fit{width:auto}
 .data.fit td{white-space:nowrap} /* หน้ารายชื่อ: ช่องกว้างพอดีกับข้อความ ไม่ตัดบรรทัด */
 .data.fit .cell-sel{min-width:0}
 .data th.top{text-align:center;vertical-align:middle;font-weight:700}
+:root{--week:#000}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--week:#e6e6e6}}
+.data th.top.wk{border-left:3px solid var(--week)}
 .data th.top .top-red{display:block;color:#d61f1f}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .data th.top .top-red{color:#ff7b72}}
 .roster-note{align-self:flex-end;flex:1 1 360px;background:#fff6d6;color:#5c4400;border:1px solid #f0d77a;border-radius:6px;padding:6px 10px;font-size:14px;font-weight:600;line-height:1.5}
@@ -346,7 +349,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261022.090709';
+const APP_VERSION = '20261022.091512';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -358,7 +361,7 @@ const TABS = [
   // roster = หน้ารายชื่อ (ไม่ใช่รายการทดสอบ): headerRow = แถวหัวตาราง, freezeCols = จำนวนคอลัมน์ซ้ายที่ตรึงไว้ (ตรึงที่ D2)
   // editable = คอลัมน์ที่แก้ได้ (ชื่อหัวตารางแถว 2), sheetStyle = ใช้สี/ตัวหนา/เซลล์ผสานตามชีท, note = แสดงข้อความแจ้ง What's New
   {name:'รายชื่อจัดทำวีดีโอ', gid:'1348359682', roster:true, headerRow:2, sheetStyle:true, editable:['สถานะการส่ง WBS', 'ส่งหัวหน้าทีม', 'อัพขึ้น'], color:10},
-  {name:'รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)', gid:'1921321948', roster:true, headerRow:2, freezeCols:3, note:true, editable:['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'], color:9},
+  {name:'รายชื่อทดสอบโปรแกรม(ประจำสัปดาห์)', gid:'1921321948', roster:true, headerRow:2, freezeCols:3, note:true, weekLines:true, editable:['หัวหน้าทีม', 'สถานะทดสอบ', 'หมายเหตุ'], color:9},
   {name:'สรุป', gid:'750027123', summary:true, color:0},
   {name:'HOSxP V4', gid:'653470496', color:1},
   {name:'ไม่สามารถทดสอบได้', gid:'1356310016', color:8},
@@ -1261,7 +1264,7 @@ function renderSheet(tab){
       return `<td class="${tab.roster ? '' : cls(t.headers[i])}${ed}">${linkify(norm(c))}</td>`;
     }).join('')}${showHist ? historyCell(tab.gid, it.idx) : ''}</tr>`).join('');
   // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
-  let topRow = '';
+  let topRow = '', weekCss = '';
   if(t.top){
     const label = i => t.top[t.colIdx[i]] || '';
     for(let k=0; k<order.length;){
@@ -1269,13 +1272,17 @@ function renderSheet(tab){
       while(k+span<order.length && !label(order[k+span]) && k+span!==tab.freezeCols) span++;
       // บรรทัดที่ 2 เป็นต้นไปของหัวสัปดาห์ (เช่น วันประชุม) เป็นสีแดง
       const [first, ...rest] = label(order[k]).split('\n');
-      topRow += `<th colspan="${span}" class="top"${tab.sheetStyle ? sheetCss(tab.gid, (tab.headerRow||2)-1, t.colIdx[order[k]]+1) : ''}>${esc(first)}${rest.map(l=>`<span class="top-red">${esc(l)}</span>`).join('')}</th>`;
+      // weekLines: เส้นหนาสีดำกั้นระหว่างสัปดาห์ (ทุกกลุ่มหัวตารางที่เริ่มใหม่ ยกเว้นกลุ่มแรก)
+      const wk = tab.weekLines && k > 0 && label(order[k]);
+      if(wk) weekCss += `.data.weeks thead tr:last-child>th:nth-child(${k+1}),.data.weeks tbody td:nth-child(${k+1}){border-left:3px solid var(--week)}`;
+      topRow += `<th colspan="${span}" class="top${wk ? ' wk' : ''}"${tab.sheetStyle ? sheetCss(tab.gid, (tab.headerRow||2)-1, t.colIdx[order[k]]+1) : ''}>${esc(first)}${rest.map(l=>`<span class="top-red">${esc(l)}</span>`).join('')}</th>`;
       k += span;
     }
     topRow = `<tr>${topRow}</tr>`;
   }
   return (tab.roster ? searchBar(fl, tab) : filterBar(tab.name, all, fl)) +
-    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}${tab.sheetStyle ? sheetCss(tab.gid, tab.headerRow||1, t.colIdx[i]+1) : ''}>${esc(t.headers[i])}</th>`).join('')}${showHist ? '<th class="th-hist">ประวัติผู้แก้ไข</th>' : ''}</tr></thead>
+    (weekCss ? `<style>${weekCss}</style>` : '') +
+    `<div class="tablewrap"><table class="data${tab.roster?' fit':''}${weekCss?' weeks':''}" data-freeze="${tab.freezeCols||0}"><thead>${topRow}<tr>${order.map(i=>`<th${i===t.f.image?' class="th-img"':i===resCol?' class="th-res"':''}${tab.sheetStyle ? sheetCss(tab.gid, tab.headerRow||1, t.colIdx[i]+1) : ''}>${esc(t.headers[i])}</th>`).join('')}${showHist ? '<th class="th-hist">ประวัติผู้แก้ไข</th>' : ''}</tr></thead>
      <tbody>${body || `<tr><td colspan="${order.length + (showHist?1:0)}" class="empty">ไม่พบรายการ</td></tr>`}</tbody></table></div>${tab.roster ? rosterLists(tab, t, order) : ''}
      <script type="x">${shown.length}/${all.length}<\/script>`;
 }
