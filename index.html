@@ -351,7 +351,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261022.103415';
+const APP_VERSION = '20261022.130852';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -898,7 +898,7 @@ function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.id
 // ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ห้องฉุกเฉิน ER + ER + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
 // (รวมเฉพาะในหน้าสรุป ไม่แก้ชีท — ข้อที่หัวข้อซ้ำกันนับครั้งเดียว)
 const XE_GIDS = ['653470496', '304524163', '480114421', '1356310016', '332727688'];
-function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe',untested:false,tested:false,lastWeek:!!memGet('lastWeek')}; }
+function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe',untested:false,tested:false,lastWeek:memGet('lastWeek') !== false}; }
 
 function applyFilters(items, fl){
   const range = dateRange(fl);
