@@ -214,6 +214,9 @@ body.sheet-view .tablewrap{flex:1;min-height:120px;max-height:none}
 th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .data td.w-img{width:96px;min-width:96px;max-width:96px;white-space:normal}
 .imgcell{display:flex;flex-direction:column;gap:4px}
+.btn-sm.view.wn{background:var(--wn-bg);color:var(--wn-fg);border-color:var(--wn-fg);white-space:normal;line-height:1.25}
+:root{--wn-bg:#f1eafb;--wn-fg:#6a3fb0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--wn-bg:#2a2140;--wn-fg:#c7aef2}}
 .btn-sm{font-size:12px;padding:2px 6px;white-space:nowrap}
 .btn-sm.view{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .imgcell .note{font-size:12px;color:var(--muted);word-break:break-word}
@@ -354,7 +357,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261027.162620';
+const APP_VERSION = '20261027.162937';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -1480,11 +1483,13 @@ function rowMedia(gid, idx){
   const t = data[gid];
   const {urls, note} = mediaOf(t.rows[idx][t.f.image]);
   const seen = new Set(urls.map(driveId).filter(Boolean));
+  // own = รูปที่อัปโหลด/ลิงก์ในชีท, wn = รูปที่ได้จากหน้า What's New ตอนนำเข้า (แยกเป็นอีกปุ่ม)
+  const wn = urls.filter(u=>/whatsnew/i.test(u)), own = urls.filter(u=>!/whatsnew/i.test(u));
   for(const f of driveFiles[rowKey(gid, idx)] || []){
-    if(f.url){ if(!urls.includes(f.url)) urls.push(f.url); continue; } // ภาพจาก What's New
-    if(!seen.has(f.id)){ seen.add(f.id); urls.push(`https://drive.google.com/file/d/${f.id}/view`); }
+    if(f.url){ if(!wn.includes(f.url) && !own.includes(f.url)) wn.push(f.url); continue; } // ภาพจาก What's New
+    if(!seen.has(f.id)){ seen.add(f.id); own.push(`https://drive.google.com/file/d/${f.id}/view`); }
   }
-  return {urls, note};
+  return {urls: own.concat(wn), own, wn, note};
 }
 // เรียก Apps Script แบบ JSONP — ถ้าโหลดไม่ขึ้น (Apps Script ตอบหน้า error ชั่วคราว เช่นมีคนเรียกพร้อมกันมาก) ลองใหม่อีก 2 ครั้ง
 function jsonp(url, timeoutMs = 30000, tries = 3){
@@ -1518,16 +1523,17 @@ async function ensureDriveList(){
 }
 function imageCell(gid, idx){
   // แสดงเฉพาะปุ่ม ไม่แสดงข้อความเดิมในช่อง (ลิงก์ในช่องยังเปิดได้จากปุ่มดูรูป)
-  const {urls} = rowMedia(gid, idx);
+  const {own, wn} = rowMedia(gid, idx);
   const key = `${gid}:${idx}`;
   return `<td class="w-img"><div class="imgcell">
-    ${urls.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${urls.length})</button>`
-      : !driveLoadedAt && UPLOAD_URL ? `<button class="btn-sm" data-view="${key}" title="กดเพื่อโหลดรูปของข้อนี้">ดูรูป</button>` : ''}
+    ${own.length ? `<button class="btn-sm view" data-view="${key}">ดูรูป (${own.length})</button>` : ''}
+    ${wn.length ? `<button class="btn-sm view wn" data-view="${key}:wn" title="รูปจากหน้า What's New (ลบไม่ได้)">ดูรูปจาก What's New (${wn.length})</button>` : ''}
+    ${!own.length && !wn.length && !driveLoadedAt && UPLOAD_URL ? `<button class="btn-sm" data-view="${key}" title="กดเพื่อโหลดรูปของข้อนี้">ดูรูป</button>` : ''}
     <button class="btn-sm" data-up="${key}">อัปโหลด</button></div></td>`;
 }
 
 let viewer = {list:[], i:0, gid:null, idx:null};
-function openViewer(urls, gid, idx){ viewer = {list:urls, i:0, gid, idx}; showViewer(); }
+function openViewer(urls, gid, idx, wn = false){ viewer = {list:urls, i:0, gid, idx, wn}; showViewer(); }
 function showViewer(){
   const box = document.getElementById('viewer');
   const u = viewer.list[viewer.i], id = driveId(u);
@@ -1537,8 +1543,9 @@ function showViewer(){
     ? `<img src="${esc(src)}" alt="ภาพประกอบ" onerror="if(!this.dataset.f&&'${id||''}'){this.dataset.f=1;this.src='https://lh3.googleusercontent.com/d/${id||''}'}">`
     : `<div class="empty">ไฟล์นี้แสดงตัวอย่างไม่ได้ (อาจเป็นวิดีโอหรือเว็บเพจ)<br><a href="${esc(u)}" target="_blank" rel="noopener">เปิดลิงก์</a></div>`;
   // ที่มาของรูป: ลบได้เฉพาะรูปที่เก็บใน Google Drive (Apps Script ตรวจอีกครั้งว่าอยู่ในโฟลเดอร์เก็บรูปของระบบ)
-  const canDel = !!(viewer.gid!=null && id && UPLOAD_URL);
-  const from = id ? 'Google Drive' : /whatsnew/i.test(u) ? "หน้า What's New (ลบไม่ได้)" : 'ลิงก์ภายนอก (ลบไม่ได้)';
+  // รูปในปุ่ม "ดูรูปจาก What's New" ลบไม่ได้ (บางรูปเก็บสำเนาไว้ใน Drive แต่ยังเป็นรูปของหน้า What's New)
+  const canDel = !!(viewer.gid!=null && id && UPLOAD_URL && !viewer.wn);
+  const from = viewer.wn || /whatsnew/i.test(u) ? "หน้า What's New (ลบไม่ได้)" : id ? 'Google Drive' : 'ลิงก์ภายนอก (ลบไม่ได้)';
   box.querySelector('.cap').innerHTML = `${viewer.i+1} / ${viewer.list.length} · รูปจาก ${from} · <a href="${esc(u)}" target="_blank" rel="noopener">เปิดในแท็บใหม่</a>`;
   box.querySelector('#delImg').hidden = !canDel;
   box.querySelector('#delConfirm').hidden = true;
@@ -1760,12 +1767,12 @@ document.getElementById('main').addEventListener('click', e=>{
   if(cell && !e.target.closest('a, .ed-input')){ openEditor(cell); return; }
   const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
   if(v){
-    const [gid, idx] = v.dataset.view.split(':');
+    const [gid, idx, src] = v.dataset.view.split(':');
     v.disabled = true; v.textContent = 'กำลังโหลด…';
     ensureDriveList().catch(err=>console.warn('รายการรูป:', err.message)).then(()=>{
-      const urls = rowMedia(gid, +idx).urls;
+      const m = rowMedia(gid, +idx), urls = src === 'wn' ? m.wn : m.own.length ? m.own : m.wn;
       softRender();
-      if(urls.length) openViewer(urls, gid, +idx); else alert('ข้อนี้ยังไม่มีรูป');
+      if(urls.length) openViewer(urls, gid, +idx, urls === m.wn); else alert('ข้อนี้ยังไม่มีรูป');
     });
     return;
   }
