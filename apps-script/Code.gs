@@ -505,7 +505,8 @@ function deleteImage(prm) {
   const id = String(prm.id || '');
   if (!/^[\w-]{20,}$/.test(id)) throw new Error('รหัสไฟล์ไม่ถูกต้อง');
   const file = DriveApp.getFileById(id);
-  if ((file.getDescription() || '').indexOf(KEY_PREFIX) !== 0) throw new Error('ลบได้เฉพาะรูปที่อัปโหลดผ่านระบบนี้');
+  // ลบได้เฉพาะรูป/วิดีโอ (ไม่ให้ลบไฟล์ข้อมูลของระบบ เช่น edit-history.json)
+  if (!/^(image|video)\//.test(file.getMimeType())) throw new Error('ลบได้เฉพาะไฟล์รูปหรือวิดีโอ');
   let inFolder = false;
   const parents = file.getParents();
   while (parents.hasNext()) if (parents.next().getId() === FOLDER_ID) inFolder = true;
