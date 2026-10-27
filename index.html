@@ -354,7 +354,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261027.160546';
+const APP_VERSION = '20261027.162620';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -1536,9 +1536,11 @@ function showViewer(){
   box.querySelector('.stage').innerHTML = isImg
     ? `<img src="${esc(src)}" alt="ภาพประกอบ" onerror="if(!this.dataset.f&&'${id||''}'){this.dataset.f=1;this.src='https://lh3.googleusercontent.com/d/${id||''}'}">`
     : `<div class="empty">ไฟล์นี้แสดงตัวอย่างไม่ได้ (อาจเป็นวิดีโอหรือเว็บเพจ)<br><a href="${esc(u)}" target="_blank" rel="noopener">เปิดลิงก์</a></div>`;
-  box.querySelector('.cap').innerHTML = `${viewer.i+1} / ${viewer.list.length} · <a href="${esc(u)}" target="_blank" rel="noopener">เปิดในแท็บใหม่</a>`;
-  // ลบได้ทุกรูปที่เก็บใน Google Drive (Apps Script ตรวจอีกครั้งว่าอยู่ในโฟลเดอร์เก็บรูปของระบบ)
-  box.querySelector('#delImg').hidden = !(viewer.gid!=null && id && UPLOAD_URL);
+  // ที่มาของรูป: ลบได้เฉพาะรูปที่เก็บใน Google Drive (Apps Script ตรวจอีกครั้งว่าอยู่ในโฟลเดอร์เก็บรูปของระบบ)
+  const canDel = !!(viewer.gid!=null && id && UPLOAD_URL);
+  const from = id ? 'Google Drive' : /whatsnew/i.test(u) ? "หน้า What's New (ลบไม่ได้)" : 'ลิงก์ภายนอก (ลบไม่ได้)';
+  box.querySelector('.cap').innerHTML = `${viewer.i+1} / ${viewer.list.length} · รูปจาก ${from} · <a href="${esc(u)}" target="_blank" rel="noopener">เปิดในแท็บใหม่</a>`;
+  box.querySelector('#delImg').hidden = !canDel;
   box.querySelector('#delConfirm').hidden = true;
   box.querySelectorAll('.nav-btn').forEach(b=>b.style.visibility = viewer.list.length>1 ? 'visible' : 'hidden');
   box.hidden = false;
