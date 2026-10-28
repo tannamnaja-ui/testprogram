@@ -248,7 +248,8 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .note-box{width:min(640px,100%)}
 .note-box h2{margin:0 36px 10px 0;font-size:18px}
 .note-full{white-space:pre-wrap;word-break:break-word;line-height:1.7;font-size:15px}
-.note-more{display:block;margin-top:4px;white-space:nowrap}
+.note-more{display:inline-block;margin-left:4px;vertical-align:middle;white-space:nowrap}
+td.edit:has(.note-more){white-space:nowrap}
 .admin-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px}
 .admin-btn{background:#efe7fb;color:#4b2a8a;border-color:#d6c6f2;font-weight:700}
 #viewer .box{background:var(--panel);border-radius:8px;max-width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;position:relative;padding:12px}
@@ -368,7 +369,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261028.163258';
+const APP_VERSION = '20261028.163549';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
