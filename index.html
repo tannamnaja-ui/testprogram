@@ -245,6 +245,10 @@ th.th-img{white-space:normal;width:96px;min-width:96px;max-width:96px}
 .admin-box h3{margin:0 0 4px;font-size:15px}
 .admin-box input[type=password]{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);width:220px}
 .admin-box .close{position:absolute;top:10px;right:10px}
+.note-box{width:min(640px,100%)}
+.note-box h2{margin:0 36px 10px 0;font-size:18px}
+.note-full{white-space:pre-wrap;word-break:break-word;line-height:1.7;font-size:15px}
+.note-more{display:block;margin-top:4px;white-space:nowrap}
 .admin-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px}
 .admin-btn{background:#efe7fb;color:#4b2a8a;border-color:#d6c6f2;font-weight:700}
 #viewer .box{background:var(--panel);border-radius:8px;max-width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;position:relative;padding:12px}
@@ -321,6 +325,13 @@ a{color:var(--accent)}
 <nav id="nav"></nav>
 <main id="main"></main>
 <input type="file" id="fileInput" accept="image/*" multiple hidden>
+<div id="noteBox" class="modal" hidden>
+  <div class="box admin-box note-box">
+    <button class="close" data-note-close title="ปิด">✕</button>
+    <h2 id="noteTitle">หมายเหตุ</h2>
+    <div id="noteText" class="note-full"></div>
+  </div>
+</div>
 <div id="admin" class="modal" hidden>
   <div class="box admin-box">
     <button class="close" data-admin-close title="ปิด">✕</button>
@@ -357,7 +368,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261028.160008';
+const APP_VERSION = '20261028.163258';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -687,7 +698,10 @@ document.getElementById('admin').addEventListener('click', e=>{
   if(e.target.id==='admin' || e.target.hasAttribute('data-admin-close')) document.getElementById('admin').hidden = true;
   if(e.target.hasAttribute('data-admin-logout')){ try{ sessionStorage.removeItem('admin'); }catch(err){} adminShow(); }
 });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.getElementById('admin').hidden = true; });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ document.getElementById('admin').hidden = true; document.getElementById('noteBox').hidden = true; } });
+document.getElementById('noteBox').addEventListener('click', e=>{
+  if(e.target.id==='noteBox' || e.target.hasAttribute('data-note-close')) document.getElementById('noteBox').hidden = true;
+});
 document.getElementById('sheetLink').href = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=750027123#gid=750027123`;
 
 function parseCSV(text){
@@ -1287,7 +1301,9 @@ function renderSheet(tab){
       if(tab.roster && tabOpts(tab.gid).cols[sheetCol(t, it.idx, i)])
         return `<td class="edit"${tab.sheetStyle ? sheetCss(tab.gid, sr, sc) : ''}>${rosterSelect(tab.gid, it.idx, i, norm(c))}</td>`;
       if(tab.roster && (tab.editable||[]).includes(t.headers[i]))
-        return `<td class="edit"${tab.sheetStyle ? sheetCss(tab.gid, sr, sc) : ''}><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet"></td>`;
+        return `<td class="edit"${tab.sheetStyle ? sheetCss(tab.gid, sr, sc) : ''}><input class="cell-in" data-edit="${tab.gid}:${it.idx}:${i}" value="${esc(norm(c))}" list="dl-${i}" size="${t.headers[i]==='หมายเหตุ' ? 24 : 14}" title="พิมพ์แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกลง Google Sheet">${
+          // หมายเหตุยาวเกินช่อง: ปุ่มเปิดอ่านข้อความเต็ม
+          t.headers[i]==='หมายเหตุ' && norm(c).length > 22 ? `<button class="btn-sm note-more" data-note="${tab.gid}:${it.idx}:${i}">แสดงรายละเอียด</button>` : ''}</td>`;
       return `<td class="${tab.roster ? '' : cls(t.headers[i])}${ed}">${linkify(norm(c))}</td>`;
     }).join('')}${showHist ? historyCell(tab.gid, it.idx) : ''}</tr>`).join('');
   // หัวตารางชั้นบน: ช่องที่มีข้อความกินพื้นที่ต่อไปจนถึงช่องถัดไปที่มีข้อความ (แบบผสานเซลล์ในชีท) และแยกที่แนวตรึง
@@ -1764,6 +1780,18 @@ document.getElementById('main').addEventListener('input', e=>{
 document.getElementById('main').addEventListener('click', e=>{
   const cell = e.target.closest('td[data-cell]');
   if(cell && !e.target.closest('a, .ed-input')){ openEditor(cell); return; }
+  const nb = e.target.closest('[data-note]');
+  if(nb){
+    // แสดงหมายเหตุเต็ม (อ่านค่าล่าสุดจากช่องที่กำลังแก้ ถ้ามี) พร้อมชื่อเล่นของคนนั้น
+    const [gid, idx, i] = nb.dataset.note.split(':'), t = data[gid], row = t.rows[+idx];
+    const inp = document.querySelector(`[data-edit="${gid}:${idx}:${i}"]`);
+    const nick = t.headers.indexOf('ชื่อเล่น'), name = t.headers.indexOf('ชื่อ-นามสกุล');
+    const who = norm(row[nick] || '') || norm(row[name] || '');
+    document.getElementById('noteTitle').textContent = 'หมายเหตุ' + (who ? ' — ' + who : '');
+    document.getElementById('noteText').textContent = inp ? inp.value : norm(row[+i]);
+    document.getElementById('noteBox').hidden = false;
+    return;
+  }
   const v = e.target.closest('[data-view]'), u = e.target.closest('[data-up]');
   if(v){
     const [gid, idx, src] = v.dataset.view.split(':');
