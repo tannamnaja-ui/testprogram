@@ -357,7 +357,7 @@ a{color:var(--accent)}
 
 <script>
 // เลขเวอร์ชันถูกอัปเดตอัตโนมัติทุกครั้งที่ commit (.githooks/pre-commit)
-const APP_VERSION = '20261027.162937';
+const APP_VERSION = '20261028.160008';
 const SHEET_ID = '1U5eVS4zEt4g4D1YCwjoToaZEymw9TA-RZBCECkY134s';
 // URL ของเว็บแอป Apps Script สำหรับอัปโหลดรูป (ดูวิธีติดตั้งใน apps-script/Code.gs)
 const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzj13G8OBSY8tICUkLR7dPqj3HOKfX8cxSPYVHqi22gmGiTjXl0SKHoHy2LnzPu1p5l/exec';
@@ -380,8 +380,6 @@ const TABS = [
   {name:'Cloud', gid:'2062208758', color:4},
   {name:'New Feture', gid:'1950255477', hide:['สถานะ'], color:5},
   {name:'Back office', gid:'1412781504', color:7},
-  // noMenu = ใช้ในหน้าสรุปอย่างเดียว ไม่แสดงเป็นเมนู
-  {name:'ER', gid:'480114421', color:11, noMenu:true},
 ];
 // ใช้กับชีทที่ไม่มีแถวหัวตาราง (PPL, Inventory)
 const STD_HEADERS = ['ลำดับ','วันที่','กลุ่ม','ประเภท','หัวข้อ','รายละเอียดย่อ','โมดูล/หน้าจอ','ปัญหาที่พบ','สิ่งที่แก้ไข','วิธีตรวจสอบ','ภาพ/วิดีโอประกอบ','ผลการทดสอบ','ผู้ตรวจสอบ','หมายเหตุ'];
@@ -901,9 +899,9 @@ function dateRange(fl){
 }
 // ข้อนี้มีรูป (ลิงก์ในชีท หรือรูปที่อัปโหลดผ่านระบบ) ให้กดดูได้หรือไม่
 function hasImage(it){ return data[it.gid]?.f.image>=0 && rowMedia(it.gid, it.idx).urls.length>0; }
-// ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ห้องฉุกเฉิน ER + ER + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
+// ตัวเลือก "HOSxP XE" ในหน้าสรุป = HOSxP V4 + ห้องฉุกเฉิน ER + ไม่สามารถทดสอบได้(หัวหน้าทีมตรวจสอบก่อนเท่านั้น) + ส่งออก
 // (รวมเฉพาะในหน้าสรุป ไม่แก้ชีท — ข้อที่หัวข้อซ้ำกันนับครั้งเดียว)
-const XE_GIDS = ['653470496', '304524163', '480114421', '1356310016', '332727688'];
+const XE_GIDS = ['653470496', '304524163', '1356310016', '332727688'];
 function getFilter(name){ return filters[name] ||= {group:'',type:'',result:'',tester:'',from:'',to:'',q:'',img:false,src:'xe',untested:false,tested:false,lastWeek:memGet('lastWeek') !== false}; }
 
 function applyFilters(items, fl){
@@ -1442,12 +1440,13 @@ function renderSummary(tab){
   const todayOf = p => items.filter(i=>i.tester===p && isToday(i)).length;
   let shownTesters = testers;
   if(onlyPending) shownTesters = shownTesters.filter(p=>pendingOf(p) > 0);
-  if(onlyToday) shownTesters = shownTesters.filter(p=>todayOf(p) > 0);
+  // ข้อมูล "ทดสอบวันนี้" มาจาก Apps Script (โหลดตามหลัง) — ระหว่างรอยังไม่กรอง จะได้ไม่ขึ้นว่า 0 คน
+  if(onlyToday && todayKnown) shownTesters = shownTesters.filter(p=>todayOf(p) > 0);
   if(onlyPending || onlyToday) shownTesters = shownTesters.slice().sort((a,b)=>(a===BLANK) - (b===BLANK)
     || (onlyToday ? todayOf(b) - todayOf(a) : 0) || (onlyPending ? pendingOf(b) - pendingOf(a) : 0) || a.localeCompare(b,'th'));
   const shownSet = new Set(shownTesters), tItems = (onlyPending || onlyToday) ? items.filter(i=>shownSet.has(i.tester)) : items;
   const pendBox = `<label class="pend-chk"><input type="checkbox" data-pending${onlyPending?' checked':''}> แสดงเฉพาะคนที่มีรอทดสอบ</label>`
-    + `<label class="pend-chk"><input type="checkbox" data-onlytoday${onlyToday?' checked':''}> แสดงเฉพาะคนที่ทดสอบวันนี้</label>`;
+    + `<label class="pend-chk"><input type="checkbox" data-onlytoday${onlyToday?' checked':''}> แสดงเฉพาะคนที่ทดสอบวันนี้${onlyToday && !todayKnown ? ' <span class="meta">(กำลังโหลดข้อมูลวันนี้…)</span>' : ''}</label>`;
   const t4 = pendBox + `<table class="sum"><thead><tr><th>ผู้ทดสอบ (${shownTesters.filter(p=>p!==BLANK).length} คน)</th>${types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>รวม</th><th class="r-today" title="จำนวนข้อที่ผลการทดสอบเปลี่ยนในวันนี้">ทดสอบวันนี้</th>${resHead}</tr></thead><tbody>
     ${shownTesters.map(p=>{ const pi=items.filter(i=>i.tester===p);
       return `<tr><td>${esc(p)}</td>${types.map(t=>cell(n(pi,i=>i.type===t))).join('')}<td><b>${pi.length}</b></td>${todayCell(pi)}${resCells(pi)}</tr>`; }).join('')}
